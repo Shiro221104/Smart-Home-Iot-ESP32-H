@@ -1,5 +1,5 @@
 package com.example.myapplication.Feature.Intro
-
+import com.example.myapplication.MainActivity
 import android.content.Intent
 import android.os.Bundle
 import android.view.WindowManager
@@ -10,8 +10,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Text
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -33,63 +38,87 @@ class IntroActivity : ComponentActivity() {
         )
 
         setContent {
-            Intro()
+            Intro{startActivity(Intent(this, MainActivity::class.java))
+                overridePendingTransition(
+                    android.R.anim.fade_in,
+                    android.R.anim.fade_out
+                )
+                finish()}
         }
 
 
     }
 
-    @Preview
+
     @Composable
-    fun Intro() {
-        ConstraintLayout(
+    fun Intro(onNavigate: () -> Unit) {
+        LaunchedEffect(Unit) {
+            delay(1000)
+            onNavigate()
+        }
+
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color.White)
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFFEEF2F7),
+                            Color(0xFFE3F2FD)
+                        )
+                    )
+                )
         ) {
-            val (img, img2, logo, text) = createRefs()
 
-            Image(
-                painter = painterResource(id = R.drawable.top_tight),
-                contentDescription = "",
-                modifier = Modifier.constrainAs(img) {
-                    end.linkTo(parent.end)
-                    top.linkTo(parent.top)
-                }
-            )
-
-            Image(
-                painter = painterResource(id = R.drawable.logo),
-                contentDescription = "",
+            Box(
                 modifier = Modifier
-                    .padding(32.dp)
-                    .constrainAs(logo) {
-                        end.linkTo(parent.end)
-                        top.linkTo(img.bottom)
-                    }
+                    .size(180.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = 40.dp, y = (-40).dp)
+
             )
 
-            Text(
-                text = "Elevate your \nLearning Experience",
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Black,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.constrainAs(text) {
-                    top.linkTo(logo.bottom)
-                    start.linkTo(parent.start)
-                    end.linkTo(parent.end)
-                }
+
+            Box(
+                modifier = Modifier
+                    .size(220.dp)
+                    .align(Alignment.BottomStart)
+                    .offset(x = (-60).dp, y = 60.dp)
+
             )
 
-            Image(
-                painter = painterResource(id = R.drawable.bottom_left),
-                contentDescription = "",
-                modifier = Modifier.constrainAs(img2) {
-                    start.linkTo(parent.start)
-                    bottom.linkTo(parent.bottom)
-                }
-            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+
+                Image(
+                    painter = painterResource(id = R.drawable.logo),
+                    contentDescription = null,
+                    modifier = Modifier.size(260.dp)
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = "SMART HOME",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF0A2540)
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "Smart Living Made Simple",
+                    fontSize = 18.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
-    }
-}
+    }}
