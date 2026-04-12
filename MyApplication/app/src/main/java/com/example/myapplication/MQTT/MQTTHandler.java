@@ -29,6 +29,7 @@ public class MQTTHandler {
             MqttConnectOptions options = new MqttConnectOptions();
             options.setUserName("Hungnguyen221104");
             options.setPassword("Hung221104@".toCharArray());
+            options.setCleanSession(true);
 
             IMqttToken token = client.connect(options);
 
@@ -37,7 +38,8 @@ public class MQTTHandler {
                 public void onSuccess(IMqttToken asyncActionToken) {
                     Log.d("MQTT", "Connected Cloud");
 
-                    subscribe("esp32/dht11/temperature"); // 🔥 đúng topic
+                    // 🔥 subscribe trạng thái đèn
+                    subscribe("esp32/lamp/status");
                 }
 
                 @Override
@@ -69,11 +71,37 @@ public class MQTTHandler {
             e.printStackTrace();
         }
     }
+
     public void subscribe(String topic) {
         try {
-            client.subscribe(topic, 0);
+            client.subscribe(topic, 1);
         } catch (MqttException e) {
             e.printStackTrace();
         }
+    }
+
+    // 🔥 gửi dữ liệu
+    public void publish(String topic, String message) {
+        try {
+            if (client != null && client.isConnected()) {
+                MqttMessage mqttMessage = new MqttMessage();
+                mqttMessage.setPayload(message.getBytes());
+                mqttMessage.setQos(1);
+
+                client.publish(topic, mqttMessage);
+
+                Log.d("MQTT", "Sent: " + message);
+            }
+        } catch (MqttException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // 🔥 bật/tắt đèn
+    public void controlLamp(boolean isOn) {
+        String topic = "esp32/lamp";
+        String message = isOn ? "ON" : "OFF";
+
+        publish(topic, message);
     }
 }

@@ -3,8 +3,10 @@ package com.example.myapplication
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import com.example.myapplication.Feature.home.MainScreen
+import com.example.myapplication.Feature.home.HomeScreen
+
 import com.example.myapplication.MQTT.MQTTHandler
+import com.example.myapplication.Navigation.MainScreen
 
 class MainActivity : ComponentActivity() {
 
