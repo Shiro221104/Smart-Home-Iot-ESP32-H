@@ -16,7 +16,6 @@ const char* password = "99990000";
 const char* mqtt_server = "b46a1e0912534437b2b78880fc3cf93a.s1.eu.hivemq.cloud";
 const int mqtt_port = 8883;
 
-// ===== Credentials (từ ảnh của bạn) =====
 const char* mqtt_user = "Hungnguyen221104";
 const char* mqtt_pass = "Hung221104@";
 
@@ -56,7 +55,7 @@ void setup() {
   Serial.println(WiFi.localIP());
 
   // ===== MQTT Setup =====
-  espClient.setInsecure();   // 🔥 BẮT BUỘC
+  espClient.setInsecure();   
   client.setServer(mqtt_server, mqtt_port);
 }
 
