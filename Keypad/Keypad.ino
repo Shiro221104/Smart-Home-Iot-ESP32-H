@@ -1,6 +1,12 @@
 #include <Keypad.h>
 #include <ESP32Servo.h>
+#include <Wire.h>
+#include <U8g2lib.h>
 
+// ===== OLED =====
+U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
+
+// ===== Keypad =====
 #define ROW_NUM   4
 #define COLUMN_NUM 4
 
@@ -11,73 +17,106 @@ char keys[ROW_NUM][COLUMN_NUM] = {
   {'*', '0', '#', 'D'}
 };
 
-// ✅ Chân đã tối ưu
 byte pin_rows[ROW_NUM]   = {23, 14, 27, 26};
-byte pin_column[COLUMN_NUM] = {25, 33, 32, 21};
+byte pin_column[COLUMN_NUM] = {25, 33, 32, 19};
 
 Keypad keypad = Keypad(makeKeymap(keys), pin_rows, pin_column, ROW_NUM, COLUMN_NUM);
 
-// 🔐 Password
+// ===== Password =====
 String correctPassword = "1234";
 String inputPassword = "";
 int maxLength = 4;
 
-// 🔧 Servo
+// ===== Servo =====
 Servo myServo;
-int servoPin = 22;
+int servoPin = 18;
 
-void setup() {
-  Serial.begin(115200);
-
-  myServo.attach(servoPin);
-  myServo.write(0); // đóng cửa
-
-  Serial.println("=== DOOR LOCK SYSTEM ===");
-  Serial.println("Enter Password:");
+// ===== OLED function =====
+void showMessage(String line1, String line2 = "") {
+  u8g2.clearBuffer();
+  u8g2.setFont(u8g2_font_ncenB08_tr);
+  u8g2.drawStr(0, 20, line1.c_str());
+  u8g2.drawStr(0, 40, line2.c_str());
+  u8g2.sendBuffer();
 }
 
+// ===== Setup =====
+void setup() {
+  Serial.begin(115200);
+  delay(1000); // đảm bảo Serial ổn định
+
+  Serial.println("=== SYSTEM START ===");
+
+  // OLED
+  u8g2.begin();
+  showMessage("DOOR LOCK", "Enter Password");
+
+  // Servo
+  myServo.attach(servoPin);
+  myServo.write(0);
+
+  Serial.println("Setup done");
+}
+
+// ===== Loop =====
 void loop() {
+
+  // 🔥 DEBUG: luôn in để biết ESP còn chạy
+  Serial.println("Loop running...");
+  delay(200);
+
   char key = keypad.getKey();
 
-  if (key) {
+  if (key != NO_KEY) {
 
-    Serial.print("Key: ");
+    Serial.print("Key pressed: ");
     Serial.println(key);
 
-    // 🔁 Xóa
+    // 🔁 Clear
     if (key == '*') {
       inputPassword = "";
-      Serial.println("Cleared!");
+      showMessage("Cleared", "Enter Again");
+      Serial.println("Password cleared");
+      return;
     }
 
-    // ✅ Xác nhận
-    else if (key == '#') {
-      if (inputPassword == correctPassword) {
-        Serial.println("✅ Access Granted");
+    // 🔢 Input
+    if (inputPassword.length() < maxLength) {
+      inputPassword += key;
 
-        // 🔓 Mở cửa
+      String stars = "";
+      for (int i = 0; i < inputPassword.length(); i++) {
+        stars += "*";
+      }
+
+      showMessage("Input:", stars);
+
+      Serial.print("Current input: ");
+      Serial.println(inputPassword);
+    }
+
+    // ✅ Check password
+    if (inputPassword.length() == maxLength) {
+
+      Serial.println("Checking password...");
+
+      if (inputPassword == correctPassword) {
+        Serial.println("Access Granted");
+        showMessage("Access Granted", "Opening...");
+
         myServo.write(90);
         delay(3000);
-
-        // 🔒 Đóng lại
         myServo.write(0);
+
       } else {
-        Serial.println("❌ Wrong Password");
+        Serial.println("Wrong Password");
+        showMessage("Wrong Password", "Try Again");
+        delay(2000);
       }
 
+      // Reset
       inputPassword = "";
-    }
-
-    // 🔢 Nhập số
-    else {
-      if (inputPassword.length() < maxLength) {
-        inputPassword += key;
-
-        Serial.print("Input: ");
-        Serial.println(inputPassword);
-      } else {
-        Serial.println("⚠️ Max length reached!");
-      }
+      showMessage("Enter Password");
     }
   }
 }
