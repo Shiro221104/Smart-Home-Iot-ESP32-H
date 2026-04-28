@@ -4,7 +4,7 @@ data class Device(
     var id: String = "",
     val name: String = "",
     val room: String = "",
+    val type: String = "",
     val image: String = "",
-    val status: String = "OFF",
-    val topic: String = ""
+    val status: String = "OFF"
 )

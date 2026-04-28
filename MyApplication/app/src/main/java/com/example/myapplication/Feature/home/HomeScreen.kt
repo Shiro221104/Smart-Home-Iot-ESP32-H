@@ -14,66 +14,120 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.MQTT.MQTTHandler
 import com.example.myapplication.Core.ViewModels.DeviceViewModel
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import com.example.myapplication.Core.ViewModels.SensorViewModel
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Icon
 @Composable
 fun HomeScreen(
     mqttHandler: MQTTHandler
 ) {
 
-    val viewModel: DeviceViewModel = viewModel()
-    val devices = viewModel.devices
+    val deviceViewModel: DeviceViewModel = viewModel()
+    val sensorViewModel: SensorViewModel = viewModel()
 
-    var temperature by remember { mutableStateOf("0°C") }
-    var humidity by remember { mutableStateOf("0%") }
+    val devices = deviceViewModel.devices
+    val sensor = sensorViewModel.sensor.value
+
+    var expanded by remember { mutableStateOf(false) }
+    var showAddDialog by remember { mutableStateOf(false) }
+    var selectedRoom by remember { mutableStateOf("All") }
 
     LaunchedEffect(Unit) {
-        viewModel.loadDevices()
+        deviceViewModel.loadDevices()
     }
 
-    LaunchedEffect(Unit) {
-        mqttHandler.setCallback { topic, message ->
-            when (topic) {
-                "esp32/dht11/temperature" -> temperature = "$message°C"
-                "esp32/dht11/humidity" -> humidity = "$message%"
-            }
-        }
+    val filteredDevices = if (selectedRoom == "All") {
+        devices
+    } else {
+        devices.filter { it.room == selectedRoom }
     }
 
     Scaffold { inner ->
 
         LazyVerticalGrid(
-            columns = GridCells.Fixed(2), // 🔥 2 cột
+            columns = GridCells.Fixed(2),
             contentPadding = inner,
             modifier = Modifier.padding(8.dp)
         ) {
 
-
-            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(2) }) {
+            item(span = { GridItemSpan(2) }) {
                 HomeHeader()
             }
 
-            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(2) }) {
-                Banner(temperature, humidity)
-            }
-
-            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(2) }) {
-                Text(
-                    text = "All Devices",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(8.dp)
+            item(span = { GridItemSpan(2) }) {
+                Banner(
+                    temp = "${sensor.temperature}°C",
+                    humidity = "${sensor.humidity}%"
                 )
             }
 
+            // 🔥 TITLE + MENU 3 CHẤM
+            item(span = { GridItemSpan(2) }) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
 
-            items(devices) { device ->
+                    Text(
+                        text = "All Devices",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Box {
+                        IconButton(onClick = { expanded = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = null)
+                        }
+
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Add Device") },
+                                onClick = {
+                                    expanded = false
+                                    showAddDialog = true
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            item(span = { GridItemSpan(2) }) {
+                RoomCategoryBar(
+                    devices = devices,
+                    selectedRoom = selectedRoom,
+                    onSelected = { selectedRoom = it }
+                )
+            }
+
+            items(filteredDevices) { device ->
                 SmartDeviceCard(
+                    deviceId = device.id,
                     device = device,
                     mqttHandler = mqttHandler,
-                    viewModel = viewModel
+                    viewModel = deviceViewModel
                 )
             }
         }
+    }
+
+    // 🔥 DIALOG THÊM DEVICE
+    if (showAddDialog) {
+        AddDeviceDialog(
+            onDismiss = { showAddDialog = false },
+            onAdd = { device ->
+                deviceViewModel.addDevice(device)
+                showAddDialog = false
+            }
+        )
     }
 }
