@@ -1,116 +1,107 @@
 #include <WiFi.h>
-#include <PubSubClient.h>
+#include <Firebase_ESP_Client.h>
 #include <WiFiClientSecure.h>
 
 // ===== WIFI =====
-const char* ssid = "Tang 4";
-const char* password = "88888888";
+const char* ssid = "Quang Thu";
+const char* password = "1000000000";
 
-// ===== MQTT (HiveMQ Cloud) =====
-const char* mqtt_server = "b46a1e0912534437b2b78880fc3cf93a.s1.eu.hivemq.cloud";
-const int mqtt_port = 8883;
-const char* mqtt_user = "Hungnguyen221104";
-const char* mqtt_pass = "Hung221104@";
 
-// ===== OBJECT =====
-WiFiClientSecure espClient;
-PubSubClient client(espClient);
+// ===== Firebase =====
+#define API_KEY "AIzaSyBGLN7JVyZU8T_DRnqIP1BUE4b1p3-dv3M"
+#define DATABASE_URL "https://esp32-c9b75-default-rtdb.asia-southeast1.firebasedatabase.app/"
+// Firebase objects
+FirebaseData fbdo;
+FirebaseAuth auth;
+FirebaseConfig config;
 
-// ===== LED =====
-int ledPin = 4;
+// ===== GPIO =====
+#define LIVING_LED 4
+#define KITCHEN_LED 5
+#define BEDROOM_LED 18
 
-// ===== CALLBACK =====
-void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.println("\n===== CALLBACK RECEIVED =====");
-
-  Serial.print("Topic: ");
-  Serial.println(topic);
-
-  String msg = "";
-  for (int i = 0; i < length; i++) {
-    msg += (char)payload[i];
-  }
-
-  msg.trim();
-
-  Serial.print("Message: ");
-  Serial.println(msg);
-
-  if (msg == "ON") {
-    Serial.println("===> TURN ON LED");
-    digitalWrite(ledPin, HIGH);
-    client.publish("esp32/lamp/status", "ON");
-  } 
-  else if (msg == "OFF") {
-    Serial.println("===> TURN OFF LED");
-    digitalWrite(ledPin, LOW);
-    client.publish("esp32/lamp/status", "OFF");
-  } 
-  else {
-    Serial.println("===> UNKNOWN COMMAND");
-  }
-}
-
-// ===== CONNECT WIFI =====
+// ===== WIFI =====
 void setup_wifi() {
-  delay(10);
-  Serial.println("\nConnecting to WiFi...");
-  
+  Serial.begin(115200);
   WiFi.begin(ssid, password);
 
+  Serial.print("Connecting WiFi");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
 
-  Serial.println("\nWiFi connected!");
-  Serial.print("IP: ");
-  Serial.println(WiFi.localIP());
-}
-
-// ===== RECONNECT MQTT =====
-void reconnect() {
-  while (!client.connected()) {
-    Serial.print("Connecting to MQTT...");
-
-    if (client.connect("ESP32Client", mqtt_user, mqtt_pass)) {
-      Serial.println(" SUCCESS!");
-
-      client.subscribe("esp32/lamp");
-      Serial.println("Subscribed to: esp32/lamp");
-
-      client.publish("esp32/status", "ESP32 Connected");
-    } else {
-      Serial.print(" FAILED, rc=");
-      Serial.print(client.state());
-      Serial.println(" -> retry in 2s");
-      delay(2000);
-    }
-  }
+  Serial.println("\nConnected!");
 }
 
 // ===== SETUP =====
 void setup() {
-  Serial.begin(115200);
-  pinMode(ledPin, OUTPUT);
 
-  Serial.println("ESP32 START");
+  pinMode(LIVING_LED, OUTPUT);
+  pinMode(KITCHEN_LED, OUTPUT);
+  pinMode(BEDROOM_LED, OUTPUT);
 
   setup_wifi();
 
-  // Bỏ verify SSL (cho dễ test)
-  espClient.setInsecure();
+  // Firebase config
+  config.api_key = API_KEY;
+  config.database_url = DATABASE_URL;
 
-  client.setServer(mqtt_server, mqtt_port);
-  client.setCallback(callback);
+  Firebase.begin(&config, &auth);
+  Firebase.reconnectWiFi(true);
+}
+
+// ===== HANDLE DEVICE =====
+void handleDevice(String room, String type, String status) {
+
+  if (type != "light") return;
+
+  int pin = -1;
+
+  if (room == "livingroom") pin = LIVING_LED;
+  else if (room == "kitchen") pin = KITCHEN_LED;
+  else if (room == "bedroom") pin = BEDROOM_LED;
+
+  if (pin == -1) return;
+
+  if (status == "ON") {
+    digitalWrite(pin, HIGH);
+  } else {
+    digitalWrite(pin, LOW);
+  }
+
+  Serial.println("Room: " + room + " -> " + status);
 }
 
 // ===== LOOP =====
 void loop() {
-  if (!client.connected()) {
-    reconnect();
+
+  if (Firebase.RTDB.getJSON(&fbdo, "/devices")) {
+
+    FirebaseJson &json = fbdo.jsonObject();
+    size_t len = json.iteratorBegin();
+
+    String key, value;
+
+    for (size_t i = 0; i < len; i++) {
+
+      int type;
+      json.iteratorGet(i, type, key, value);
+
+      FirebaseJson device;
+      device.setJsonData(value);
+
+      String room, devType, status;
+
+      device.get(room, "room");
+      device.get(devType, "type");
+      device.get(status, "status");
+
+      handleDevice(room, devType, status);
+    }
+
+    json.iteratorEnd();
   }
 
-  client.loop();
-  delay(10);
+  delay(1000);
 }

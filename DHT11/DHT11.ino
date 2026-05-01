@@ -9,8 +9,8 @@
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
 // ===== WIFI =====
-#define WIFI_SSID "Tang 4"
-#define WIFI_PASSWORD "88888888"
+#define WIFI_SSID "Quang Thu"
+#define WIFI_PASSWORD "1000000000"
 
 // ===== FIREBASE =====
 #define FIREBASE_HOST "https://esp32-c9b75-default-rtdb.asia-southeast1.firebasedatabase.app"
@@ -24,10 +24,13 @@ DHT dht(DHTPIN, DHTTYPE);
 #define MQ2_A0 5
 #define MQ2_D0 2
 
+// 🔥 tránh spam
+String lastGasStatus = "";
+
 void setup() {
   Serial.begin(115200);
 
-  // OLED I2C (ESP32-S3)
+  // OLED
   Wire.begin(8, 9);
   u8g2.begin();
 
@@ -61,15 +64,15 @@ void loop() {
   else if (gas < 600) gasStatus = "WARNING";
   else gasStatus = "DANGER";
 
-  // ===== OLED DISPLAY =====
+  // ===== OLED =====
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_ncenB08_tr);
 
-  u8g2.drawStr(0, 15, "ESP32-S3 SENSOR");
+  u8g2.drawStr(0, 15, "ESP32 SENSOR");
 
-  String tempStr = "Temp: " + String(t) + " C";
-  String humStr  = "Hum: " + String(h) + " %";
-  String gasStr  = "Gas: " + String(gasStatus);
+  String tempStr = "Temp: " + String(t) + "C";
+  String humStr  = "Hum: " + String(h) + "%";
+  String gasStr  = "Gas: " + gasStatus;
 
   u8g2.drawStr(0, 35, tempStr.c_str());
   u8g2.drawStr(0, 50, humStr.c_str());
@@ -77,7 +80,7 @@ void loop() {
 
   u8g2.sendBuffer();
 
-  // ===== FIREBASE =====
+  // ===== FIREBASE SENSOR =====
   String json = "{";
   json += "\"temperature\":" + String(t) + ",";
   json += "\"humidity\":" + String(h) + ",";
@@ -96,10 +99,35 @@ void loop() {
   http.addHeader("Content-Type", "application/json");
 
   int httpResponseCode = http.PUT(json);
-
-  Serial.println("HTTP Code: " + String(httpResponseCode));
+  Serial.println("Sensor update: " + String(httpResponseCode));
 
   http.end();
+
+  // ===== PUSH NOTIFICATION =====
+  if (gasStatus == "DANGER" && lastGasStatus != "DANGER") {
+
+    Serial.println("🔥 GAS DANGER -> PUSH NOTIFICATION");
+
+    String notiJson = "{";
+    notiJson += "\"title\":\"CANH BAO GAS\",";
+    notiJson += "\"message\":\"Phat hien khi gas nguy hiem!\",";
+    notiJson += "\"time\":" + String(millis());
+    notiJson += "}";
+
+    String notiUrl = String(FIREBASE_HOST) + "/notifications.json";
+
+    HTTPClient http2;
+    http2.begin(client, notiUrl);
+    http2.addHeader("Content-Type", "application/json");
+
+    int code = http2.POST(notiJson);
+    Serial.println("Push notification: " + String(code));
+
+    http2.end();
+  }
+
+  // cập nhật trạng thái trước đó
+  lastGasStatus = gasStatus;
 
   delay(3000);
 }
