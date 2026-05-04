@@ -120,7 +120,7 @@ fun HomeScreen(
         }
     }
 
-    // 🔥 DIALOG THÊM DEVICE
+
     if (showAddDialog) {
         AddDeviceDialog(
             onDismiss = { showAddDialog = false },

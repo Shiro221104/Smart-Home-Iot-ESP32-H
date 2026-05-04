@@ -13,8 +13,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.example.myapplication.Feature.Profile.ProfileScreen
+
 import com.example.myapplication.Feature.home.HomeScreen
+import com.example.myapplication.Feature.notification.NotificationScreen
 import com.example.myapplication.MQTT.MQTTHandler
 
 @Composable
@@ -30,7 +31,9 @@ fun MainScreen(mqttHandler: MQTTHandler) {
                     selected = index
                     when (index) {
                         0 -> navController.navigate("home")
-                        1 -> navController.navigate("profile")
+                        1 -> navController.navigate("notification")
+                        2 -> navController.navigate("support")
+                        3 -> navController.navigate("setting")
                     }
                 }
             )
@@ -42,7 +45,9 @@ fun MainScreen(mqttHandler: MQTTHandler) {
             modifier = Modifier.padding(padding)
         ) {
             composable("home") { HomeScreen(mqttHandler) }
-            composable("profile") { ProfileScreen() }
+            composable("notification"){ NotificationScreen() }
+            composable("support") {}
+            composable("setting"){}
         }
     }
 }

@@ -4,7 +4,7 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <DHT.h>
-
+#include <time.h>
 // ===== OLED =====
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
@@ -48,6 +48,7 @@ void setup() {
   }
 
   Serial.println("\nWiFi OK");
+  configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 }
 
 void loop() {
@@ -104,27 +105,30 @@ void loop() {
   http.end();
 
   // ===== PUSH NOTIFICATION =====
-  if (gasStatus == "DANGER" && lastGasStatus != "DANGER") {
+ if (gasStatus == "DANGER" && lastGasStatus != "DANGER") {
 
-    Serial.println("🔥 GAS DANGER -> PUSH NOTIFICATION");
+  Serial.println("🔥 GAS DANGER -> PUSH NOTIFICATION");
 
-    String notiJson = "{";
-    notiJson += "\"title\":\"CANH BAO GAS\",";
-    notiJson += "\"message\":\"Phat hien khi gas nguy hiem!\",";
-    notiJson += "\"time\":" + String(millis());
-    notiJson += "}";
+  time_t now;
+  time(&now);
 
-    String notiUrl = String(FIREBASE_HOST) + "/notifications.json";
+  String notiJson = "{";
+  notiJson += "\"title\":\"CANH BAO GAS\",";
+  notiJson += "\"message\":\"Phat hien khi gas nguy hiem!\",";
+  notiJson += "\"time\":" + String((long)now);
+  notiJson += "}";
 
-    HTTPClient http2;
-    http2.begin(client, notiUrl);
-    http2.addHeader("Content-Type", "application/json");
+  String notiUrl = String(FIREBASE_HOST) + "/notifications.json";
 
-    int code = http2.POST(notiJson);
-    Serial.println("Push notification: " + String(code));
+  HTTPClient http2;
+  http2.begin(client, notiUrl);
+  http2.addHeader("Content-Type", "application/json");
 
-    http2.end();
-  }
+  int code = http2.POST(notiJson);
+  Serial.println("Push notification: " + String(code));
+
+  http2.end();
+}
 
   // cập nhật trạng thái trước đó
   lastGasStatus = gasStatus;

@@ -23,9 +23,19 @@ import com.example.myapplication.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.IconButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 @Composable
 fun HomeHeader() {
+    var showNotiDropDown by remember { mutableStateOf(false) }
+    var isClicked by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -33,7 +43,6 @@ fun HomeHeader() {
         verticalAlignment = Alignment.CenterVertically
     ) {
 
-        // TEXT
         Column(
             modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
         ) {
@@ -44,15 +53,12 @@ fun HomeHeader() {
                 fontWeight = FontWeight.Bold,
             )
 
-
-
             Text(
                 text = "Have a nice day!",
                 fontSize = 12.sp,
                 color = Color.Gray
             )
         }
-
 
         Box(
             modifier = Modifier
@@ -61,14 +67,40 @@ fun HomeHeader() {
                 .background(Color(0xFFF2F2F2)),
             contentAlignment = Alignment.Center
         ) {
-            Image(
-                painter = painterResource(R.drawable.bell_icon),
-                contentDescription = null,
-                modifier = Modifier.size(40.dp)
-            )
+            IconButton(
+                onClick = {
+                    showNotiDropDown = true
+                    isClicked = true
+                }
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.bell_icon),
+                    contentDescription = null,
+                    modifier = Modifier.size(40.dp),
+                    colorFilter = if (isClicked)
+                        androidx.compose.ui.graphics.ColorFilter.tint(Color.Blue)
+                    else null
+                )
+            }
+
+            DropdownMenu(
+                expanded = showNotiDropDown,
+                onDismissRequest = { showNotiDropDown = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("No new notifications") },
+                    onClick = { showNotiDropDown = false }
+                )
+
+                DropdownMenuItem(
+                    text = { Text("Gas detected!") },
+                    onClick = { showNotiDropDown = false }
+                )
+            }
         }
     }
 }
+
 
 @Preview
 @Composable

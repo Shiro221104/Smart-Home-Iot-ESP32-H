@@ -32,8 +32,8 @@ fun HomeBottomBar(selected: Int, onSelect: (Int) -> Unit){
         modifier = Modifier.height(60.dp),
         windowInsets = WindowInsets(0)
     ) {
-        val titles = listOf<String>("Home","Profile","Support","Setting")
-        val icons = listOf(R.drawable.bottom_btn1, R.drawable.bottom_btn2, R.drawable.bottom_btn3, R.drawable.bottom_btn4)
+        val titles = listOf<String>("Home","Notification","Support","Setting")
+        val icons = listOf(R.drawable.bottom_btn1,R.drawable.bottom_btn5,  R.drawable.bottom_btn3, R.drawable.bottom_btn4)
         titles.forEachIndexed { index, string ->
             NavigationBarItem(selected = selected == index, onClick = { onSelect(index) }, icon = {
                 Icon(
