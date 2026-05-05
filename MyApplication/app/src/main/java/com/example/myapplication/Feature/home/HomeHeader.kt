@@ -60,44 +60,7 @@ fun HomeHeader() {
             )
         }
 
-        Box(
-            modifier = Modifier
-                .size(45.dp)
-                .clip(RoundedCornerShape(50))
-                .background(Color(0xFFF2F2F2)),
-            contentAlignment = Alignment.Center
-        ) {
-            IconButton(
-                onClick = {
-                    showNotiDropDown = true
-                    isClicked = true
-                }
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.bell_icon),
-                    contentDescription = null,
-                    modifier = Modifier.size(40.dp),
-                    colorFilter = if (isClicked)
-                        androidx.compose.ui.graphics.ColorFilter.tint(Color.Blue)
-                    else null
-                )
-            }
 
-            DropdownMenu(
-                expanded = showNotiDropDown,
-                onDismissRequest = { showNotiDropDown = false }
-            ) {
-                DropdownMenuItem(
-                    text = { Text("No new notifications") },
-                    onClick = { showNotiDropDown = false }
-                )
-
-                DropdownMenuItem(
-                    text = { Text("Gas detected!") },
-                    onClick = { showNotiDropDown = false }
-                )
-            }
-        }
     }
 }
 

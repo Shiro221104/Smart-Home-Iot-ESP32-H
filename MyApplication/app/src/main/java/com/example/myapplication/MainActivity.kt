@@ -72,6 +72,9 @@ class MainActivity : ComponentActivity() {
                 ) {
                 }
 
+
+
+
                 override fun onChildRemoved(snapshot: DataSnapshot) {}
                 override fun onChildMoved(
                     snapshot: DataSnapshot,

@@ -13,6 +13,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.example.myapplication.Feature.Setting.SettingScreen
+import com.example.myapplication.Feature.Support.SupportScreen
 
 import com.example.myapplication.Feature.home.HomeScreen
 import com.example.myapplication.Feature.notification.NotificationScreen
@@ -46,8 +48,8 @@ fun MainScreen(mqttHandler: MQTTHandler) {
         ) {
             composable("home") { HomeScreen(mqttHandler) }
             composable("notification"){ NotificationScreen() }
-            composable("support") {}
-            composable("setting"){}
+            composable("support"){ SupportScreen() }
+            composable("setting"){ SettingScreen() }
         }
     }
 }
