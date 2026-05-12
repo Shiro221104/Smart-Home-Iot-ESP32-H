@@ -7,6 +7,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.Core.Models.*
 import com.google.firebase.database.FirebaseDatabase
@@ -30,7 +32,7 @@ fun AddDeviceDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(20.dp),
 
-        title = { Text("➕ Add Device") },
+        title = { Text(text="Add Device", fontWeight = FontWeight.Bold) },
 
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -127,7 +129,7 @@ fun AddDeviceDialog(
                     val id = db.push().key ?: return@Button
 
                     val device = Device(
-                        id = id, // 🔥 gán id tại đây
+                        id = id,
                         name = name,
                         room = room.code,
                         type = type.toFirebase(),
@@ -147,5 +149,13 @@ fun AddDeviceDialog(
                 Text("Cancel")
             }
         }
+    )
+}
+@Preview(showBackground = true)
+@Composable
+fun PreviewAddDeviceDialog() {
+    AddDeviceDialog(
+        onDismiss = {},
+        onAdd = {}
     )
 }
