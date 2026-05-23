@@ -1,0 +1,17 @@
+package com.example.myapplication.Feature.Support
+
+import retrofit2.http.Body
+import retrofit2.http.Headers
+import retrofit2.http.POST
+
+interface DialogflowApi {
+
+    @Headers(
+        "Authorization: Bearer ya29.c.c0AZ4bNpYp9eTIbOsA22eXaDIb4aS58tzP-ABRgH3thupwewRy97YPMrrTzwYMH-L7xtxLU4OZ6g4Ioz_NuneGzX01YCUDyxn2t9MtdZQf32RVEkrdjuJi7YSYWVyC0nMnbtD415STD4RYFc_P8g5dADcn55HPdiTnnHaaImBhOG3MTH8VlxOxpZe092Nj4YLocS1RSw1-adr2PbixTp5LFea7AkiVp-LcSI4QQj-NipztzIVrk1SPEM55urDfKNmAzcrn4nT5YDqY1ticggFKnrqzmuF9gDs3c7Aw2C5ZIldmzyDN6ZtaUNDA8yrVzi0XxHn_3QTQ6N857vhReU5pv_c-wbdbSNbmaFf3OnsUaJ8IRNU47mN0kDb5b04w8FDD3VmcoWkN400KsF7JxkIahB17g_bae8qIXRJZUUB6pz13jZa2_8n22om3qFxWIuhxpao0-5vSyjuXcMnhR8ZngVaoXqt1ed9nW_hf3ObrnYgifhMmyYywq0Fnj1dQ1MeBwy6yRz_YnvWMxMQZQVvgVrS_2uk-rSzv-tgy7Y-8YJa9nW8s8hdij6hvfmhdtbnr0a34nzO7906uW7oe0X7sWBUr1JoWwanOp889V8f_e91QQl2SW5sQFXIhZ4R6RuFzUZYmF7hepUlFlUfWOBpJe60-5RegrjXrsRkmeMUbv1ihJOMor7n8hFJypJk_IgcrIZOj75t2JVXc6jch-UnRSrxiY1gb1hMvz3h8y0jVxgzk-wb_390S7YdUi8qXMpUfugOMgi2J98mFXSVWtnQrX4j7f2qoQJ2i27o425joJ78jw8VraotXFXiu-mfh0ktle236B93odeVc3rQB7gUvjkxd2fW_p-lScomybMtMiJV8FkZhx2Vc2IgY1V5bw3sFghf1eyF15Xs6gy214madY1oeiokBYkZ3tUmOr_cF4O_O90miqS1Zd4O_b90w1JjhVVXixbwBUFlqQI9sjbBmUpsdlanyfXlXiZIt_hqd_lBlJFQg1caM8di",
+        "Content-Type: application/json"
+    )
+    @POST("v2/projects/esp32-c9b75/agent/sessions/123456:detectIntent")
+    suspend fun sendMessage(
+        @Body request: DialogflowRequest
+    ): DialogflowResponse
+}

@@ -18,10 +18,10 @@ import com.example.myapplication.Feature.Support.SupportScreen
 
 import com.example.myapplication.Feature.home.HomeScreen
 import com.example.myapplication.Feature.notification.NotificationScreen
-import com.example.myapplication.MQTT.MQTTHandler
+
 
 @Composable
-fun MainScreen(mqttHandler: MQTTHandler) {
+fun MainScreen() {
     val navController = rememberNavController()
     var selected by remember { mutableStateOf(0) }
 
@@ -46,7 +46,7 @@ fun MainScreen(mqttHandler: MQTTHandler) {
             startDestination = "home",
             modifier = Modifier.padding(padding)
         ) {
-            composable("home") { HomeScreen(mqttHandler) }
+            composable("home") { HomeScreen() }
             composable("notification"){ NotificationScreen() }
             composable("support"){ SupportScreen() }
             composable("setting"){ SettingScreen() }

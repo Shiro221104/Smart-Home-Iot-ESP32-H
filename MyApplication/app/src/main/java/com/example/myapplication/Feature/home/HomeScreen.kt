@@ -11,7 +11,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.myapplication.MQTT.MQTTHandler
+
 import com.example.myapplication.Core.ViewModels.DeviceViewModel
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
@@ -23,7 +23,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 @Composable
 fun HomeScreen(
-    mqttHandler: MQTTHandler
+
 ) {
 
     val deviceViewModel: DeviceViewModel = viewModel()
@@ -113,7 +113,6 @@ fun HomeScreen(
                 SmartDeviceCard(
                     deviceId = device.id,
                     device = device,
-                    mqttHandler = mqttHandler,
                     viewModel = deviceViewModel
                 )
             }

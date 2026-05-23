@@ -3,8 +3,10 @@ package com.example.myapplication.Core.utils
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
+import android.graphics.Color
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import com.example.myapplication.R
 
 object NotificationHelper {
 
@@ -21,13 +23,17 @@ object NotificationHelper {
                 "Cảnh báo",
                 NotificationManager.IMPORTANCE_HIGH
             )
+            channel.enableLights(true)
+            channel.lightColor = Color.GREEN
             manager.createNotificationChannel(channel)
         }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(message)
-            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setColor(Color.GREEN)
+            .setColorized(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
 

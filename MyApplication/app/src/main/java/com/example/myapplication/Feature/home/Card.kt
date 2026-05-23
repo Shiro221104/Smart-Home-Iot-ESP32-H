@@ -12,7 +12,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.myapplication.Core.Models.Device
-import com.example.myapplication.MQTT.MQTTHandler
 import com.example.myapplication.Core.ViewModels.DeviceViewModel
 import com.example.myapplication.R
 
@@ -20,7 +19,7 @@ import com.example.myapplication.R
 fun SmartDeviceCard(
     deviceId: String,              // 🔥 thêm cái này
     device: Device,
-    mqttHandler: MQTTHandler,
+
     viewModel: DeviceViewModel
 ) {
 
