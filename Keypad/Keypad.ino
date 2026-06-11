@@ -5,26 +5,38 @@
 #include <Wire.h>
 #include <U8g2lib.h>
 
-// ===== WiFi =====
-#define WIFI_SSID "Quang Thu"
-#define WIFI_PASSWORD "1000000000"
+// =====================================================
+// WIFI
+// =====================================================
+#define WIFI_SSID "ESP32_Hotspot"
+#define WIFI_PASSWORD "12345678"
 
-// ===== Firebase =====
+// =====================================================
+// FIREBASE
+// =====================================================
 #define API_KEY "AIzaSyBGLN7JVyZU8T_DRnqIP1BUE4b1p3-dv3M"
 #define DATABASE_URL "https://esp32-c9b75-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
-// ===== Device ID =====
+// =====================================================
+// DEVICE ID
+// =====================================================
 String deviceId = "-OrJEzAul-5Cr1Hm-ptf";
 
-// Firebase objects
+// =====================================================
+// FIREBASE OBJECTS
+// =====================================================
 FirebaseData fbdo;
 FirebaseAuth auth;
 FirebaseConfig config;
 
-// ===== OLED =====
+// =====================================================
+// OLED SH1106
+// =====================================================
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
-// ===== Keypad =====
+// =====================================================
+// KEYPAD
+// =====================================================
 #define ROW_NUM 4
 #define COLUMN_NUM 4
 
@@ -38,70 +50,146 @@ char keys[ROW_NUM][COLUMN_NUM] = {
 byte pin_rows[ROW_NUM] = {23, 14, 27, 26};
 byte pin_column[COLUMN_NUM] = {25, 33, 32, 19};
 
-Keypad keypad = Keypad(makeKeymap(keys), pin_rows, pin_column, ROW_NUM, COLUMN_NUM);
+Keypad keypad = Keypad(makeKeymap(keys),
+                       pin_rows,
+                       pin_column,
+                       ROW_NUM,
+                       COLUMN_NUM);
 
-// ===== Password =====
+// =====================================================
+// PASSWORD
+// =====================================================
 String correctPassword = "1234";
 String inputPassword = "";
 int maxLength = 4;
 
-// ===== Servo =====
+// =====================================================
+// SERVO
+// =====================================================
 Servo myServo;
 int servoPin = 18;
 
-// ===== State =====
+// =====================================================
+// STATE
+// =====================================================
 String lastStatus = "";
 
-// ===== OLED =====
-void showMessage(String l1, String l2 = "") {
+// =====================================================
+// OLED FUNCTION
+// =====================================================
+void showMessage(String line1, String line2 = "") {
+
   u8g2.clearBuffer();
+
   u8g2.setFont(u8g2_font_ncenB08_tr);
-  u8g2.drawStr(0, 20, l1.c_str());
-  u8g2.drawStr(0, 40, l2.c_str());
+
+  u8g2.drawStr(0, 20, line1.c_str());
+  u8g2.drawStr(0, 40, line2.c_str());
+
   u8g2.sendBuffer();
 }
 
-// ===== OPEN DOOR =====
-void openDoor(String source) {
-  Serial.println("🚪 Opening door from: " + source);
+// =====================================================
+// FIREBASE UPDATE STATUS
+// =====================================================
+void updateStatus(String status) {
 
-  showMessage(source, "Opening...");
+  String path = "/devices/" + deviceId + "/status";
 
-  myServo.write(90);
-  delay(3000);
-  myServo.write(0);
+  if (Firebase.RTDB.setString(&fbdo, path, status)) {
 
-  // reset Firebase về OFF
-  if (Firebase.RTDB.setString(&fbdo, "/devices/" + deviceId + "/status", "OFF")) {
-    Serial.println("✅ Reset status OK");
+    Serial.print("✅ Status -> ");
+    Serial.println(status);
+
   } else {
-    Serial.println("❌ Reset FAILED");
+
+    Serial.println("❌ Firebase Update FAILED");
     Serial.println(fbdo.errorReason());
   }
 }
 
-// ===== Setup =====
+// =====================================================
+// OPEN DOOR
+// =====================================================
+void openDoor(String source) {
+
+  Serial.println("================================");
+  Serial.println("🚪 OPEN DOOR");
+  Serial.println("📌 Source: " + source);
+
+  // ===== OLED =====
+  showMessage(source, "Door OPEN");
+
+  // ===== Firebase status =====
+  updateStatus("ON");
+
+  // ===== Open Servo =====
+  myServo.write(90);
+
+  Serial.println("🔓 Door Opened");
+
+  // ===== Keep door open =====
+  delay(5000);
+
+  // ===== Closing =====
+  showMessage("Closing Door");
+
+  Serial.println("🔒 Closing Door");
+
+  myServo.write(0);
+
+  delay(1000);
+
+  // ===== Reset status =====
+  updateStatus("OFF");
+
+  // ===== OLED =====
+  showMessage("Enter Password");
+
+  Serial.println("✅ Door Closed");
+  Serial.println("================================");
+}
+
+// =====================================================
+// SETUP
+// =====================================================
 void setup() {
+
   Serial.begin(115200);
 
-  // ===== WiFi =====
+  // =====================================================
+  // WIFI
+  // =====================================================
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
   Serial.print("🔄 Connecting WiFi");
+
   while (WiFi.status() != WL_CONNECTED) {
+
     Serial.print(".");
     delay(500);
   }
-  Serial.println("\n✅ WiFi Connected");
 
-  // ===== Firebase config =====
+  Serial.println();
+  Serial.println("✅ WiFi Connected");
+
+  // =====================================================
+  // FIREBASE CONFIG
+  // =====================================================
   config.api_key = API_KEY;
   config.database_url = DATABASE_URL;
 
-  // ===== 🔥 FIX QUAN TRỌNG (Anonymous login) =====
+  // =====================================================
+  // ANONYMOUS LOGIN
+  // =====================================================
   if (Firebase.signUp(&config, &auth, "", "")) {
-    Serial.println("✅ Anonymous Login OK");
+
+    Serial.println("✅ Firebase Anonymous Login OK");
+
   } else {
-    Serial.printf("❌ SignUp FAILED: %s\n", config.signer.signupError.message.c_str());
+
+    Serial.println("❌ Firebase Login FAILED");
+    Serial.println(config.signer.signupError.message.c_str());
   }
 
   Firebase.begin(&config, &auth);
@@ -110,59 +198,96 @@ void setup() {
   delay(1000);
 
   if (Firebase.ready()) {
+
     Serial.println("🔥 Firebase READY");
+
   } else {
+
     Serial.println("❌ Firebase NOT READY");
   }
 
-  // ===== OLED =====
+  // =====================================================
+  // OLED
+  // =====================================================
   u8g2.begin();
+
   showMessage("DOOR LOCK", "Enter Password");
 
-  // ===== Servo =====
+  // =====================================================
+  // SERVO
+  // =====================================================
   myServo.attach(servoPin);
+
   myServo.write(0);
+
+  // =====================================================
+  // INIT STATUS
+  // =====================================================
+  updateStatus("OFF");
 }
 
-// ===== Loop =====
+// =====================================================
+// LOOP
+// =====================================================
 void loop() {
 
-  // ===== Firebase đọc status =====
-  if (Firebase.RTDB.getString(&fbdo, "/devices/" + deviceId + "/status")) {
+  // =====================================================
+  // READ FIREBASE STATUS
+  // =====================================================
+  String path = "/devices/" + deviceId + "/status";
+
+  if (Firebase.RTDB.getString(&fbdo, path)) {
 
     String status = fbdo.stringData();
 
-    Serial.print("📡 Status: ");
+    Serial.print("📡 Firebase Status: ");
     Serial.println(status);
 
-    if (status != lastStatus) {
-      lastStatus = status;
+    // ===== Detect ON =====
+    if (status == "ON" && lastStatus != "ON") {
 
-      if (status == "ON") {
-        openDoor("App");
-      }
+      openDoor("App");
     }
 
+    lastStatus = status;
+
   } else {
-    Serial.println("❌ Firebase FAILED");
+
+    Serial.println("❌ Firebase Read FAILED");
     Serial.println(fbdo.errorReason());
   }
 
-  // ===== Keypad =====
+  // =====================================================
+  // KEYPAD
+  // =====================================================
   char key = keypad.getKey();
 
   if (key != NO_KEY) {
 
+    Serial.print("⌨ Key: ");
+    Serial.println(key);
+
+    // ===== Clear =====
     if (key == '*') {
+
       inputPassword = "";
+
       showMessage("Cleared", "Enter Again");
+
+      delay(1000);
+
+      showMessage("Enter Password");
+
       return;
     }
 
+    // ===== Add character =====
     if (inputPassword.length() < maxLength) {
+
       inputPassword += key;
 
       String stars = "";
+
       for (int i = 0; i < inputPassword.length(); i++) {
         stars += "*";
       }
@@ -170,19 +295,30 @@ void loop() {
       showMessage("Input:", stars);
     }
 
+    // ===== Check password =====
     if (inputPassword.length() == maxLength) {
 
       if (inputPassword == correctPassword) {
+
+        Serial.println("✅ Correct Password");
+
         openDoor("Password");
+
       } else {
+
+        Serial.println("❌ Wrong Password");
+
         showMessage("Wrong Password");
+
         delay(2000);
       }
 
+      // ===== Reset input =====
       inputPassword = "";
+
       showMessage("Enter Password");
     }
   }
 
-  delay(500);
+  delay(300);
 }
