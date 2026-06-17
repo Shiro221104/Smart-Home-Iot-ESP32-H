@@ -29,14 +29,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.R
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 private val Purple1 = Color(0xFF7B2FF7)
 private val Purple2 = Color(0xFF5F0A87)
 private val Background = Color(0xFFF5F6FB)
 
+fun getCurrentTime(): String {
+    val formatter = SimpleDateFormat("HH:mm", Locale.getDefault())
+    return formatter.format(Date())
+}
+
 data class ChatMessage(
     val text: String,
-    val isUser: Boolean
+    val isUser: Boolean,
+    val timestamp: String = getCurrentTime()
 )
 
 @Composable
@@ -70,9 +79,9 @@ fun SupportScreen(
         ) {
             items(messages) { message ->
                 if (message.isUser) {
-                    UserMessage(message = message.text)
+                    UserMessage(message = message.text, timestamp = message.timestamp)
                 } else {
-                    BotMessage(message = message.text)
+                    BotMessage(message = message.text, timestamp = message.timestamp)
                 }
             }
         }
@@ -132,7 +141,7 @@ fun SupportScreen(
 }
 
 @Composable
-fun BotMessage(message: String) {
+fun BotMessage(message: String, timestamp: String = getCurrentTime()) {
     Row(verticalAlignment = Alignment.Top) {
 
         Box(
@@ -176,17 +185,49 @@ fun BotMessage(message: String) {
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            Text(text = "Now", color = Color.Gray, fontSize = 11.sp)
+            Text(text = timestamp, color = Color.Gray, fontSize = 11.sp)
         }
     }
 }
 
 @Composable
-fun UserMessage(message: String) {
-    Column(
+fun UserMessage(message: String, timestamp: String = getCurrentTime()) {
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.End
+        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.Top
     ) {
+        Column(horizontalAlignment = Alignment.End) {
+            Box(
+                modifier = Modifier
+                    .background(
+                        brush = Brush.linearGradient(listOf(Purple1, Purple2)),
+                        shape = RoundedCornerShape(
+                            topStart = 18.dp,
+                            topEnd = 0.dp,
+                            bottomStart = 18.dp,
+                            bottomEnd = 18.dp
+                        )
+                    )
+                    .padding(14.dp)
+                    .widthIn(max = 270.dp)
+            ) {
+                Text(
+                    text = message,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Text(text = timestamp, color = Color.Gray, fontSize = 11.sp)
+        }
+
+        Spacer(modifier = Modifier.width(10.dp))
+
         Image(
             painter = painterResource(R.drawable.avatar),
             contentDescription = null,
@@ -195,38 +236,8 @@ fun UserMessage(message: String) {
                 .clip(CircleShape),
             contentScale = ContentScale.Crop
         )
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        Box(
-            modifier = Modifier
-                .background(
-                    brush = Brush.linearGradient(listOf(Purple1, Purple2)),
-                    shape = RoundedCornerShape(
-                        topStart = 18.dp,
-                        topEnd = 0.dp,
-                        bottomStart = 18.dp,
-                        bottomEnd = 18.dp
-                    )
-                )
-                .padding(14.dp)
-                .widthIn(max = 270.dp)
-        ) {
-            Text(
-                text = message,
-                color = Color.White,
-                fontSize = 15.sp,
-                lineHeight = 22.sp,
-                fontWeight = FontWeight.Medium
-            )
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Text(text = "Sent", color = Color.Gray, fontSize = 11.sp)
     }
 }
-
 @Preview(showBackground = true, showSystemUi = true)
 @Composable
 fun SupportScreenPreview() {

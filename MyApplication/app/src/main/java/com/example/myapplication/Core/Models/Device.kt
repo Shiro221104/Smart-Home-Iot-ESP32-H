@@ -6,5 +6,6 @@ data class Device(
     val room: String = "",
     val type: String = "",
     val image: String = "",
-    val status: String = "OFF"
+    val status: String = "OFF",
+    val password: String? = null
 )

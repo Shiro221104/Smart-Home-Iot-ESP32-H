@@ -35,22 +35,25 @@ fun NotificationCard(
                 shape = RoundedCornerShape(16.dp)
             )
             .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.Top
     ) {
 
-        // TIME
         Text(
             text = time,
-            fontWeight = FontWeight.Medium,
+            fontSize = 13.sp,
             color = Color.Black,
-            modifier = Modifier.width(60.dp)
+            modifier = Modifier.weight(0.3f)
         )
 
-        // CONTENT
+        Spacer(modifier = Modifier.width(12.dp))
+
         Text(
             text = content,
             fontSize = 15.sp,
-            color = Color(0xFF333333)
+            fontWeight = FontWeight.Medium,
+            color = Color(0xFF333333),
+            modifier = Modifier.weight(0.7f),
+            lineHeight = 22.sp
         )
     }
 }

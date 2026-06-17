@@ -12,14 +12,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.myapplication.Core.Models.Device
+import com.example.myapplication.Core.Models.Room
 import com.example.myapplication.Core.ViewModels.DeviceViewModel
 import com.example.myapplication.R
 
 @Composable
 fun SmartDeviceCard(
-    deviceId: String,              // 🔥 thêm cái này
+    deviceId: String,
     device: Device,
-
+    rooms: List<Room>,
     viewModel: DeviceViewModel
 ) {
 
@@ -28,6 +29,8 @@ fun SmartDeviceCard(
     LaunchedEffect(device.status) {
         isOn = device.status == "ON"
     }
+
+    val roomName = rooms.find { it.id == device.room }?.name ?: device.room  // ✅ tìm tên room
 
     Card(
         modifier = Modifier
@@ -38,7 +41,6 @@ fun SmartDeviceCard(
             containerColor = if (isOn) Color(0xFFE3F2FD) else Color(0xFFF5F5F5)
         )
     ) {
-
         Column(modifier = Modifier.padding(16.dp)) {
 
             Row(
@@ -46,7 +48,6 @@ fun SmartDeviceCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-
                 AsyncImage(
                     model = device.image,
                     contentDescription = device.name,
@@ -60,10 +61,7 @@ fun SmartDeviceCard(
                     onCheckedChange = {
                         val newStatus = if (it) "ON" else "OFF"
                         isOn = it
-
-                        // 🔥 dùng key thật
                         viewModel.updateStatus(deviceId, newStatus)
-
                     }
                 )
             }
@@ -81,7 +79,7 @@ fun SmartDeviceCard(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = device.room, // 👉 nếu muốn đẹp hơn sẽ fix dưới
+                text = roomName,
                 fontSize = 12.sp,
                 color = Color.Gray
             )

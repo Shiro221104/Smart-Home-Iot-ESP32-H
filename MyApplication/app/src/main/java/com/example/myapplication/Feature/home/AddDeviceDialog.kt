@@ -2,28 +2,35 @@ package com.example.myapplication.Feature.home
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
-import com.example.myapplication.Core.Models.*
+import com.example.myapplication.Core.Models.Device
+import com.example.myapplication.Core.Models.DeviceType
+import com.example.myapplication.Core.Models.Room
 import com.google.firebase.database.FirebaseDatabase
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddDeviceDialog(
+    rooms: List<Room>,          // 🔥 Nhận rooms từ Firebase thay vì dùng enum
     onDismiss: () -> Unit,
     onAdd: (Device) -> Unit
 ) {
-
     var name by remember { mutableStateOf("") }
-    var room by remember { mutableStateOf(RoomType.LIVING_ROOM) }
+    var selectedRoom by remember(rooms) { mutableStateOf(rooms.firstOrNull()) }
     var type by remember { mutableStateOf(DeviceType.LIGHT) }
     var image by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }           // 🔐 password cho DOOR
+    var passwordVisible by remember { mutableStateOf(false) } // 👁 toggle ẩn/hiện
 
     var expandedType by remember { mutableStateOf(false) }
     var expandedRoom by remember { mutableStateOf(false) }
@@ -31,12 +38,11 @@ fun AddDeviceDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(20.dp),
-
-        title = { Text(text="Add Device", fontWeight = FontWeight.Bold) },
-
+        title = { Text(text = "Add Device", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
+                // 📛 Device Name
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -45,20 +51,18 @@ fun AddDeviceDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 🏠 Room
+                // 🏠 Room — load từ Firebase
                 ExposedDropdownMenuBox(
                     expanded = expandedRoom,
                     onExpandedChange = { expandedRoom = !expandedRoom }
                 ) {
                     OutlinedTextField(
-                        value = room.displayName,
+                        value = selectedRoom?.name ?: "Chưa có phòng",
                         onValueChange = {},
                         readOnly = true,
                         label = { Text("Room") },
                         leadingIcon = { Icon(Icons.Default.Home, null) },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expandedRoom)
-                        },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedRoom) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
 
@@ -66,19 +70,27 @@ fun AddDeviceDialog(
                         expanded = expandedRoom,
                         onDismissRequest = { expandedRoom = false }
                     ) {
-                        RoomType.entries.forEach {
+                        if (rooms.isEmpty()) {
                             DropdownMenuItem(
-                                text = { Text(it.displayName) },
-                                onClick = {
-                                    room = it
-                                    expandedRoom = false
-                                }
+                                text = { Text("Chưa có phòng — hãy thêm phòng trước") },
+                                onClick = { expandedRoom = false },
+                                enabled = false
                             )
+                        } else {
+                            rooms.forEach { room ->
+                                DropdownMenuItem(
+                                    text = { Text(room.name) },
+                                    onClick = {
+                                        selectedRoom = room
+                                        expandedRoom = false
+                                    }
+                                )
+                            }
                         }
                     }
                 }
 
-                // 🔽 Type
+                // 🔽 Device Type
                 ExposedDropdownMenuBox(
                     expanded = expandedType,
                     onExpandedChange = { expandedType = !expandedType }
@@ -89,9 +101,7 @@ fun AddDeviceDialog(
                         readOnly = true,
                         label = { Text("Device Type") },
                         leadingIcon = { Icon(Icons.Default.Category, null) },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expandedType)
-                        },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
 
@@ -104,6 +114,8 @@ fun AddDeviceDialog(
                                 text = { Text(it.displayName) },
                                 onClick = {
                                     type = it
+                                    // 🔄 Reset password khi đổi sang loại khác
+                                    if (it != DeviceType.DOOR) password = ""
                                     expandedType = false
                                 }
                             )
@@ -111,6 +123,7 @@ fun AddDeviceDialog(
                     }
                 }
 
+                // 🖼 Image URL
                 OutlinedTextField(
                     value = image,
                     onValueChange = { image = it },
@@ -118,44 +131,66 @@ fun AddDeviceDialog(
                     leadingIcon = { Icon(Icons.Default.Image, null) },
                     modifier = Modifier.fillMaxWidth()
                 )
+
+
+                if (type == DeviceType.DOOR) {
+                    val isInvalid = password.isNotEmpty() && (password.length != 4 || !password.all { it.isDigit() })
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) password = it },
+                        label = { Text("Mật khẩu cửa (4 chữ số)") },
+                        leadingIcon = { Icon(Icons.Default.Lock, null) },
+                        isError = isInvalid,
+                        supportingText = if (isInvalid) {
+                            { Text("Nhập đúng 4 chữ số") }
+                        } else null,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        trailingIcon = {
+                            IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                                Icon(
+                                    imageVector = if (passwordVisible)
+                                        Icons.Default.VisibilityOff
+                                    else
+                                        Icons.Default.Visibility,
+                                    contentDescription = if (passwordVisible) "Hide password" else "Show password"
+                                )
+                            }
+                        },
+                        visualTransformation = if (passwordVisible)
+                            VisualTransformation.None
+                        else
+                            PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         },
-
         confirmButton = {
             Button(
+                enabled = selectedRoom != null && name.isNotBlank() &&
+                        (type != DeviceType.DOOR || (password.length == 4 && password.all { it.isDigit() })),
                 onClick = {
-
+                    val room = selectedRoom ?: return@Button
                     val db = FirebaseDatabase.getInstance().getReference("devices")
                     val id = db.push().key ?: return@Button
 
                     val device = Device(
                         id = id,
                         name = name,
-                        room = room.code,
+                        room = room.id,          // 🔥 lưu Firebase key (room.id) thay vì enum code
                         type = type.toFirebase(),
                         image = image,
-                        status = if (type == DeviceType.DOOR) "CLOSED" else "OFF"
+                        status = "OFF",
+                        password = if (type == DeviceType.DOOR) password else null  // ✅ chỉ DOOR có password
                     )
-
                     onAdd(device)
                 }
             ) {
                 Text("Add")
             }
         },
-
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
-    )
-}
-@Preview(showBackground = true)
-@Composable
-fun PreviewAddDeviceDialog() {
-    AddDeviceDialog(
-        onDismiss = {},
-        onAdd = {}
     )
 }
