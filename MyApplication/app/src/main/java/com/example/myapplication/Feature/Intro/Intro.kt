@@ -1,4 +1,5 @@
 package com.example.myapplication.Feature.Intro
+
 import com.example.myapplication.MainActivity
 import android.content.Intent
 import android.os.Bundle
@@ -6,7 +7,8 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -24,7 +26,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.constraintlayout.compose.ConstraintLayout
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.R
+import com.example.myapplication.Core.ViewModels.AuthViewModel
 import kotlinx.coroutines.*
 
 class IntroActivity : ComponentActivity() {
@@ -38,20 +42,64 @@ class IntroActivity : ComponentActivity() {
         )
 
         setContent {
-            Intro{startActivity(Intent(this, MainActivity::class.java))
-                overridePendingTransition(
-                    android.R.anim.fade_in,
-                    android.R.anim.fade_out
-                )
-                finish()}
+            IntroNavigation(
+                onNavigateToMain = {
+                    startActivity(Intent(this, MainActivity::class.java))
+                    overridePendingTransition(
+                        android.R.anim.fade_in,
+                        android.R.anim.fade_out
+                    )
+                    finish()
+                }
+            )
         }
-
-
     }
 
+    @Composable
+    fun IntroNavigation(onNavigateToMain: () -> Unit) {
+        val authViewModel: AuthViewModel = viewModel()
+        val currentAuthScreen = remember { mutableStateOf("splash") }
+
+        when (currentAuthScreen.value) {
+            "splash" -> {
+                SplashScreen {
+                    // Kiểm tra xem user đã đăng nhập chưa
+                    if (authViewModel.currentUser.value != null) {
+                        onNavigateToMain()
+                    } else {
+                        currentAuthScreen.value = "login"
+                    }
+                }
+            }
+
+            "login" -> {
+                LoginScreen(
+                    authViewModel = authViewModel,
+                    onLoginSuccess = {
+                        onNavigateToMain()
+                    },
+                    onSignupClick = {
+                        currentAuthScreen.value = "signup"
+                    }
+                )
+            }
+
+            "signup" -> {
+                SignupScreen(
+                    authViewModel = authViewModel,
+                    onBackClick = {
+                        currentAuthScreen.value = "login"
+                    },
+                    onSignupSuccess = {
+                        onNavigateToMain()
+                    }
+                )
+            }
+        }
+    }
 
     @Composable
-    fun Intro(onNavigate: () -> Unit) {
+    fun SplashScreen(onNavigate: () -> Unit) {
         LaunchedEffect(Unit) {
             delay(1000)
             onNavigate()
@@ -121,4 +169,5 @@ class IntroActivity : ComponentActivity() {
                 )
             }
         }
-    }}
+    }
+}

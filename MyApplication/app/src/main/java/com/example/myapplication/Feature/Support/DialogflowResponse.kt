@@ -6,7 +6,8 @@ data class DialogflowResponse(
 
 data class QueryResult(
     val fulfillmentText: String,
-    val intent: IntentInfo?
+    val intent: IntentInfo?,
+    val parameters: Map<String, Any>? = null
 )
 
 data class IntentInfo(

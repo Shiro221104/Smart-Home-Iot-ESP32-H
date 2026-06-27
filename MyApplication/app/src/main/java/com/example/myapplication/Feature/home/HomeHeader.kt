@@ -31,10 +31,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.draw.clip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.myapplication.Core.ViewModels.AuthViewModel
+
 @Composable
-fun HomeHeader() {
+fun HomeHeader(authViewModel: AuthViewModel = viewModel()) {
     var showNotiDropDown by remember { mutableStateOf(false) }
     var isClicked by remember { mutableStateOf(false) }
+    
+    // Lấy tên user từ AuthViewModel - quan sát sự thay đổi
+    val currentUser = authViewModel.currentUser.value
+    val displayName = if (currentUser?.displayName?.isNotEmpty() == true) {
+        currentUser.displayName
+    } else {
+        currentUser?.email?.split("@")?.get(0) ?: "User"
+    }
 
     Row(
         modifier = Modifier
@@ -47,7 +58,7 @@ fun HomeHeader() {
             modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
         ) {
             Text(
-                text = "Welcome Back, Hung",
+                text = "Welcome Back, $displayName",
                 fontSize = 18.sp,
                 color = Color.Black,
                 fontWeight = FontWeight.Bold,

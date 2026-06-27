@@ -7,5 +7,6 @@ data class Device(
     val type: String = "",
     val image: String = "",
     val status: String = "OFF",
-    val password: String? = null
+    val password: String? = null,
+    val userId: String = ""
 )

@@ -7,10 +7,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.core.app.ActivityCompat
 import com.example.myapplication.Navigation.MainScreen
+import com.example.myapplication.Core.Models.Notification
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.*
 import com.example.myapplication.Core.utils.NotificationHelper
-class MainActivity : ComponentActivity() {
 
+class MainActivity : ComponentActivity() {
 
     private lateinit var dbRef: DatabaseReference
 
@@ -26,7 +28,6 @@ class MainActivity : ComponentActivity() {
             )
         }
 
-
         // Firebase listen notifications
         listenFirebaseNotification()
 
@@ -36,30 +37,30 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun listenFirebaseNotification() {
+        // Lấy user ID hiện tại
+        val auth = FirebaseAuth.getInstance()
+        val userId = auth.currentUser?.uid ?: return
 
         dbRef = FirebaseDatabase
             .getInstance()
-            .getReference("notifications")
+            .getReference("users/$userId/notifications")
 
-        dbRef.limitToLast(1)
-            .addChildEventListener(object : ChildEventListener {
+        dbRef.addChildEventListener(object : ChildEventListener {
 
                 override fun onChildAdded(
                     snapshot: DataSnapshot,
                     previousChildName: String?
                 ) {
-
-                    val title = snapshot.child("title")
-                        .getValue(String::class.java) ?: "Cảnh báo"
-
-                    val message = snapshot.child("message")
-                        .getValue(String::class.java) ?: ""
-
-                    NotificationHelper.show(
-                        this@MainActivity,
-                        title,
-                        message
-                    )
+                    // Chuyển đổi sang Notification object
+                    val notification = snapshot.getValue(Notification::class.java)
+                    
+                    if (notification != null) {
+                        NotificationHelper.show(
+                            this@MainActivity,
+                            notification.title,
+                            notification.message
+                        )
+                    }
                 }
 
                 override fun onChildChanged(
@@ -67,9 +68,6 @@ class MainActivity : ComponentActivity() {
                     previousChildName: String?
                 ) {
                 }
-
-
-
 
                 override fun onChildRemoved(snapshot: DataSnapshot) {}
                 override fun onChildMoved(
@@ -84,6 +82,5 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-
     }
 }

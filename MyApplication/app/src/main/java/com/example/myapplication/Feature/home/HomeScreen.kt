@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.Core.ViewModels.DeviceViewModel
 import com.example.myapplication.Core.ViewModels.RoomViewModel
 import com.example.myapplication.Core.ViewModels.SensorViewModel
+import com.example.myapplication.Core.ViewModels.AuthViewModel
 
 @Composable
 fun HomeScreen() {
@@ -25,6 +26,7 @@ fun HomeScreen() {
     val deviceViewModel: DeviceViewModel = viewModel()
     val sensorViewModel: SensorViewModel = viewModel()
     val roomViewModel: RoomViewModel = viewModel()
+    val authViewModel: AuthViewModel = viewModel()
 
     val devices = deviceViewModel.devices
     val sensor = sensorViewModel.sensor.value
@@ -52,7 +54,7 @@ fun HomeScreen() {
             modifier = Modifier.padding(8.dp)
         ) {
 
-            item(span = { GridItemSpan(2) }) { HomeHeader() }
+            item(span = { GridItemSpan(2) }) { HomeHeader(authViewModel) }
 
             item(span = { GridItemSpan(2) }) {
                 Banner(
@@ -98,7 +100,7 @@ fun HomeScreen() {
                 SmartDeviceCard(
                     deviceId = device.id,
                     device = device,
-                    rooms = rooms,          // ✅ đã thêm
+                    rooms = rooms,
                     viewModel = deviceViewModel
                 )
             }

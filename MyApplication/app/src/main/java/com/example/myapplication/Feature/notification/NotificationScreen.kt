@@ -51,7 +51,7 @@ fun NotificationScreen() {
 
                 Text(
                     text = "Thông Báo",
-                    fontSize = 22.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(start = 10.dp)
                 )

@@ -31,7 +31,7 @@ fun NotificationCard(
             .fillMaxWidth()
             .padding(vertical = 6.dp)
             .background(
-                color = if (isHighlight) Color(0xFFEAEAEA) else Color.White,
+                color = if (isHighlight) Color(0xFFC8E6C9) else Color(0xFFBBDEFB),
                 shape = RoundedCornerShape(16.dp)
             )
             .padding(16.dp),

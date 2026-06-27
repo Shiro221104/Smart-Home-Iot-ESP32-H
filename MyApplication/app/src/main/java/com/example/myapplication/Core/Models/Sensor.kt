@@ -5,5 +5,6 @@ data class Sensor(
     var humidity: Float = 0f,
     var gas_value: Int = 0,
     var gas_detected: Int = 0,
-    var gas_status: String = ""
+    var gas_status: String = "",
+    val userId: String = ""
 )

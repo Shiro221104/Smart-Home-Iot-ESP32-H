@@ -15,7 +15,7 @@ import androidx.compose.ui.unit.sp
 import com.example.myapplication.R
 
 @Composable
-fun Banner(temp: String, humidity: String) {
+fun Banner(temp: String = "0°C", humidity: String = "0%") {
 
     Row(
         modifier = Modifier
@@ -48,7 +48,7 @@ fun Banner(temp: String, humidity: String) {
 
             Column {
                 Text("Temperature", color = Color.White.copy(alpha = 0.8f))
-                Text(temp, fontSize = 24.sp, color = Color.White)
+                Text(text = temp, fontSize = 24.sp, color = Color.White)
             }
         }
 
@@ -76,7 +76,7 @@ fun Banner(temp: String, humidity: String) {
 
             Column {
                 Text("Humidity", color = Color.White.copy(alpha = 0.8f))
-                Text(humidity, fontSize = 24.sp, color = Color.White)
+                Text(text = humidity, fontSize = 24.sp, color = Color.White)
             }
         }
     }

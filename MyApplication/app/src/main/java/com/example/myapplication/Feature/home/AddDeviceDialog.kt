@@ -16,12 +16,13 @@ import androidx.compose.ui.unit.dp
 import com.example.myapplication.Core.Models.Device
 import com.example.myapplication.Core.Models.DeviceType
 import com.example.myapplication.Core.Models.Room
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.FirebaseDatabase
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddDeviceDialog(
-    rooms: List<Room>,          // 🔥 Nhận rooms từ Firebase thay vì dùng enum
+    rooms: List<Room>,
     onDismiss: () -> Unit,
     onAdd: (Device) -> Unit
 ) {
@@ -29,8 +30,8 @@ fun AddDeviceDialog(
     var selectedRoom by remember(rooms) { mutableStateOf(rooms.firstOrNull()) }
     var type by remember { mutableStateOf(DeviceType.LIGHT) }
     var image by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }           // 🔐 password cho DOOR
-    var passwordVisible by remember { mutableStateOf(false) } // 👁 toggle ẩn/hiện
+    var password by remember { mutableStateOf("") }           //password cho DOOR
+    var passwordVisible by remember { mutableStateOf(false) } //toggle ẩn/hiện
 
     var expandedType by remember { mutableStateOf(false) }
     var expandedRoom by remember { mutableStateOf(false) }
@@ -38,20 +39,20 @@ fun AddDeviceDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(20.dp),
-        title = { Text(text = "Add Device", fontWeight = FontWeight.Bold) },
+        title = { Text(text = "Thêm Thiết Bị", fontWeight = FontWeight.Bold) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
 
-                // 📛 Device Name
+                //Device Name
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Device Name") },
+                    label = { Text("Tên Thiết Bị") },
                     leadingIcon = { Icon(Icons.Default.Devices, null) },
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // 🏠 Room — load từ Firebase
+                //Room — load từ Firebase
                 ExposedDropdownMenuBox(
                     expanded = expandedRoom,
                     onExpandedChange = { expandedRoom = !expandedRoom }
@@ -60,7 +61,6 @@ fun AddDeviceDialog(
                         value = selectedRoom?.name ?: "Chưa có phòng",
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Room") },
                         leadingIcon = { Icon(Icons.Default.Home, null) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedRoom) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
@@ -90,7 +90,7 @@ fun AddDeviceDialog(
                     }
                 }
 
-                // 🔽 Device Type
+                //Device Type
                 ExposedDropdownMenuBox(
                     expanded = expandedType,
                     onExpandedChange = { expandedType = !expandedType }
@@ -99,7 +99,6 @@ fun AddDeviceDialog(
                         value = type.displayName,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Device Type") },
                         leadingIcon = { Icon(Icons.Default.Category, null) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expandedType) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
@@ -123,7 +122,7 @@ fun AddDeviceDialog(
                     }
                 }
 
-                // 🖼 Image URL
+                //Image URL
                 OutlinedTextField(
                     value = image,
                     onValueChange = { image = it },
@@ -171,26 +170,30 @@ fun AddDeviceDialog(
                         (type != DeviceType.DOOR || (password.length == 4 && password.all { it.isDigit() })),
                 onClick = {
                     val room = selectedRoom ?: return@Button
-                    val db = FirebaseDatabase.getInstance().getReference("devices")
+                    val auth = FirebaseAuth.getInstance()
+                    val userId = auth.currentUser?.uid ?: return@Button
+                    
+                    val db = FirebaseDatabase.getInstance().getReference("users/$userId/devices")
                     val id = db.push().key ?: return@Button
 
                     val device = Device(
                         id = id,
                         name = name,
-                        room = room.id,          // 🔥 lưu Firebase key (room.id) thay vì enum code
+                        room = room.id,          //lưu Firebase key (room.id) thay vì enum code
                         type = type.toFirebase(),
                         image = image,
                         status = "OFF",
-                        password = if (type == DeviceType.DOOR) password else null  // ✅ chỉ DOOR có password
+                        password = if (type == DeviceType.DOOR) password else null,  //chỉ DOOR có password
+                        userId = userId
                     )
                     onAdd(device)
                 }
             ) {
-                Text("Add")
+                Text("Thêm")
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text("Hủy") }
         }
     )
 }

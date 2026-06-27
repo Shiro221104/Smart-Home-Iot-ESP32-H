@@ -12,10 +12,8 @@
         android:label="@string/app_name"
         android:theme="@style/Theme.MyApplication">
 
-        <!-- MQTT -->
-        <service android:name="org.eclipse.paho.android.service.MqttService" />
 
-        <!-- 🔥 FCM SERVICE -->
+
         <service
             android:name=".Core.Service.MyFirebaseMessagingService"
             android:exported="false">
