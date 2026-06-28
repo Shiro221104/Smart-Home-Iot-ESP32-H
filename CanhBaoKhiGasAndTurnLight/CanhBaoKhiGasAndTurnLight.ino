@@ -1,3 +1,9 @@
+// =====================================================
+// SMART HOME - ESP32-S3
+// DHT11 + MQ2 + Fan Auto + Living/Kitchen/Bedroom LED
+// Firebase: users/{userId}/devices/{deviceId}/status
+// =====================================================
+
 #include <Wire.h>
 #include <U8g2lib.h>
 #include <WiFi.h>
@@ -7,7 +13,7 @@
 #include <DHT.h>
 #include <time.h>
 
-// ===== OLED =====
+// ===== OLED (I2C: SDA=41, SCL=42) =====
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 
 // ===== WIFI =====
@@ -20,18 +26,26 @@ U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, U8X8_PIN_NONE);
 #define USER_EMAIL    "Hungnguyen221104@gmail.com"
 #define USER_PASSWORD "123456"
 
-// ===== DHT =====
+// ===== DHT11 (giu nguyen) =====
 #define DHTPIN  4
 #define DHTTYPE DHT11
 DHT dht(DHTPIN, DHTTYPE);
 
-// ===== MQ2 =====
+// ===== MQ2 (giu nguyen) =====
 #define MQ2_A0 5
 #define MQ2_D0 2
 
-// ===== RELAY & NUT NHAN =====
+// ===== RELAY QUAT & NUT NHAN QUAT (giu nguyen) =====
 #define FAN_RELAY_PIN  18
-#define BUTTON_PIN     13
+#define BUTTON_FAN     13
+
+// ===== LED PHONG KHACH =====
+#define LIVING_LED     15   // GPIO15
+#define BUTTON_LIVING  16   // GPIO16
+
+// ===== LED PHONG BEP =====
+#define KITCHEN_LED    17   // GPIO17
+#define BUTTON_KITCHEN 21   // GPIO21
 
 // ===== NGUONG GAS =====
 #define GAS_DANGER_THRESHOLD  600
@@ -39,10 +53,12 @@ DHT dht(DHTPIN, DHTTYPE);
 #define GAS_WARNING_THRESHOLD 300
 
 // ===== FIREBASE OBJECTS =====
-FirebaseData fbdo;    // doc/ghi cam bien
-FirebaseData fbdo2;   // notification gas
-FirebaseData fbdo3;   // cap nhat trang thai quat
-FirebaseData fbdo4;   // notification nut nhan thu cong
+FirebaseData fbdo;      // cam bien
+FirebaseData fbdo2;     // notification gas
+FirebaseData fbdo3;     // fan status
+FirebaseData fbdo4;     // notification nut nhan
+FirebaseData fbdo5;     // living room light status
+FirebaseData fbdo6;     // kitchen light status
 FirebaseAuth auth;
 FirebaseConfig config;
 
@@ -50,15 +66,29 @@ String userUID       = "";
 String lastGasStatus = "";
 bool   firebaseReady = false;
 
-const String fanDeviceId = "-OvLD7bW7bkRn_5Sr5uG";
+// ===== DEVICE IDs =====
+const String fanDeviceId     = "-OvLD7bW7bkRn_5Sr5uG";
+const String livingDeviceId  = "-OvKwCdcMamePNGjS0Kt";
+const String kitchenDeviceId = "-OvLD1-JevTrFOp2dNuy";
 
 // ===== TRANG THAI =====
-bool fanIsOn = false;
+bool fanIsOn     = false;
+bool livingIsOn  = false;
+bool kitchenIsOn = false;
 
-// ===== CHONG DOI NUT =====
-bool          lastBtnState  = HIGH;
-bool          stableBtnState = HIGH;
-unsigned long lastDebounce  = 0;
+// ===== DEBOUNCE NUT NHAN =====
+bool          lastBtnFan      = HIGH;
+bool          stableBtnFan    = HIGH;
+unsigned long lastDebounceFan = 0;
+
+bool          lastBtnLiving      = HIGH;
+bool          stableBtnLiving    = HIGH;
+unsigned long lastDebounceLiving = 0;
+
+bool          lastBtnKitchen      = HIGH;
+bool          stableBtnKitchen    = HIGH;
+unsigned long lastDebounceKitchen = 0;
+
 #define DEBOUNCE_MS 50
 
 // ===== NHAP NHAY OLED =====
@@ -71,33 +101,51 @@ void showScreenNormal(float t, float h, int gas, String gasStatus);
 void showScreenDanger(int gas);
 void showOLED(const char* l1, const char* l2, const char* l3, const char* l4);
 void setFan(bool on, bool sendNotif);
-void updateFanFirebase(bool on);
+void setLight(bool on, bool sendNotif, bool &stateVar, int pin,
+              FirebaseData &fd, const String &deviceId, String label);
+void updateDeviceFirebase(FirebaseData &fd, const String &deviceId, bool on);
 void pushNotification(FirebaseData &fd, String title, String message, int gasVal = -1);
 
+// =====================================================
+// SETUP
 // =====================================================
 void setup() {
   Serial.begin(115200);
 
-  Wire.begin(41, 42);
+  Wire.begin(8, 9);
   u8g2.begin();
   showOLED("Booting...", "", "", "");
 
   dht.begin();
   pinMode(MQ2_D0, INPUT);
 
+  // Relay quat
   pinMode(FAN_RELAY_PIN, OUTPUT);
   digitalWrite(FAN_RELAY_PIN, LOW);
-  fanIsOn = false;
 
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  // LED phong khach
+  pinMode(LIVING_LED, OUTPUT);
+  digitalWrite(LIVING_LED, LOW);
 
+  // LED phong bep
+  pinMode(KITCHEN_LED, OUTPUT);
+  digitalWrite(KITCHEN_LED, LOW);
+
+  // Nut nhan
+  pinMode(BUTTON_FAN,     INPUT_PULLUP);
+  pinMode(BUTTON_LIVING,  INPUT_PULLUP);
+  pinMode(BUTTON_KITCHEN, INPUT_PULLUP);
+
+  // WiFi
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   showOLED("Connecting", "WiFi...", "", "");
   while (WiFi.status() != WL_CONNECTED) { delay(500); }
   showOLED("WiFi OK", WiFi.localIP().toString().c_str(), "", "");
 
+  // NTP
   configTime(7 * 3600, 0, "pool.ntp.org", "time.nist.gov");
 
+  // Firebase
   config.api_key      = API_KEY;
   config.database_url = DATABASE_URL;
   auth.user.email     = USER_EMAIL;
@@ -115,32 +163,57 @@ void setup() {
   showOLED("Firebase OK", userUID.substring(0, 16).c_str(), "", "");
   delay(1000);
 
-  updateFanFirebase(false);
+  // Reset trang thai Firebase
+  updateDeviceFirebase(fbdo3, fanDeviceId,     false);
+  updateDeviceFirebase(fbdo5, livingDeviceId,  false);
+  updateDeviceFirebase(fbdo6, kitchenDeviceId, false);
 }
 
+// =====================================================
+// LOOP
 // =====================================================
 void loop() {
   unsigned long now = millis();
 
-  // ===== XU LY NUT NHAN - Toggle ON/OFF don gian =====
-  bool btnReading = digitalRead(BUTTON_PIN);
-  if (btnReading != lastBtnState) lastDebounce = now;
-
-  if ((now - lastDebounce) > DEBOUNCE_MS) {
-    if (btnReading == LOW && stableBtnState == HIGH) {
-      // Nhan nut -> dao trang thai quat
-      bool newState = !fanIsOn;
-      setFan(newState, true); // true = gui notification
-      Serial.println(newState ? ">> NUT: Bat quat" : ">> NUT: Tat quat");
+  // ===== NUT NHAN QUAT =====
+  bool btnFanRead = digitalRead(BUTTON_FAN);
+  if (btnFanRead != lastBtnFan) lastDebounceFan = now;
+  if ((now - lastDebounceFan) > DEBOUNCE_MS) {
+    if (btnFanRead == LOW && stableBtnFan == HIGH) {
+      setFan(!fanIsOn, true);
     }
-    stableBtnState = btnReading;
+    stableBtnFan = btnFanRead;
   }
-  lastBtnState = btnReading;
+  lastBtnFan = btnFanRead;
+
+  // ===== NUT NHAN PHONG KHACH =====
+  bool btnLivingRead = digitalRead(BUTTON_LIVING);
+  if (btnLivingRead != lastBtnLiving) lastDebounceLiving = now;
+  if ((now - lastDebounceLiving) > DEBOUNCE_MS) {
+    if (btnLivingRead == LOW && stableBtnLiving == HIGH) {
+      setLight(!livingIsOn, true, livingIsOn, LIVING_LED,
+               fbdo5, livingDeviceId, "Đèn phòng khách");
+    }
+    stableBtnLiving = btnLivingRead;
+  }
+  lastBtnLiving = btnLivingRead;
+
+  // ===== NUT NHAN PHONG BEP =====
+  bool btnKitchenRead = digitalRead(BUTTON_KITCHEN);
+  if (btnKitchenRead != lastBtnKitchen) lastDebounceKitchen = now;
+  if ((now - lastDebounceKitchen) > DEBOUNCE_MS) {
+    if (btnKitchenRead == LOW && stableBtnKitchen == HIGH) {
+      setLight(!kitchenIsOn, true, kitchenIsOn, KITCHEN_LED,
+               fbdo6, kitchenDeviceId, "Đèn phòng bếp");
+    }
+    stableBtnKitchen = btnKitchenRead;
+  }
+  lastBtnKitchen = btnKitchenRead;
 
   // ===== DOC CAM BIEN =====
-  float t      = dht.readTemperature();
-  float h      = dht.readHumidity();
-  int   gas    = analogRead(MQ2_A0);
+  float t        = dht.readTemperature();
+  float h        = dht.readHumidity();
+  int   gas      = analogRead(MQ2_A0);
   int   gasAlert = digitalRead(MQ2_D0);
 
   String gasStatus;
@@ -150,11 +223,39 @@ void loop() {
 
   // ===== LOGIC TU DONG QUAT (theo gas) =====
   if (gas >= GAS_DANGER_THRESHOLD && !fanIsOn) {
-    setFan(true, false); // false = khong gui notification nut nhan
+    setFan(true, false);
+    pushNotification(fbdo4, "Thiết Bị Tự Động Bật", "Phát hiện khí gas, quạt đã tự động bật.");
     Serial.println(">> AUTO: Gas nguy hiem -> BAT QUAT");
   } else if (gas < GAS_SAFE_THRESHOLD && fanIsOn) {
     setFan(false, false);
+    pushNotification(fbdo4, "Thiết Bị Tự Động Tắt", "Khí gas an toàn, quạt đã tự động tắt.");
     Serial.println(">> AUTO: Gas an toan -> TAT QUAT");
+  }
+
+  // ===== DOC TRANG THAI TU FIREBASE (App dieu khien) =====
+  if (firebaseReady && Firebase.ready()) {
+
+    // Den phong khach
+    String livingPath = "/users/" + userUID + "/devices/" + livingDeviceId + "/status";
+    if (Firebase.RTDB.getString(&fbdo5, livingPath)) {
+      bool appWantsOn = (fbdo5.stringData() == "ON");
+      if (appWantsOn != livingIsOn) {
+        livingIsOn = appWantsOn;
+        digitalWrite(LIVING_LED, livingIsOn ? HIGH : LOW);
+        Serial.println(">> APP: Den phong khach -> " + String(livingIsOn ? "ON" : "OFF"));
+      }
+    }
+
+    // Den phong bep
+    String kitchenPath = "/users/" + userUID + "/devices/" + kitchenDeviceId + "/status";
+    if (Firebase.RTDB.getString(&fbdo6, kitchenPath)) {
+      bool appWantsOn = (fbdo6.stringData() == "ON");
+      if (appWantsOn != kitchenIsOn) {
+        kitchenIsOn = appWantsOn;
+        digitalWrite(KITCHEN_LED, kitchenIsOn ? HIGH : LOW);
+        Serial.println(">> APP: Den phong bep -> " + String(kitchenIsOn ? "ON" : "OFF"));
+      }
+    }
   }
 
   // ===== OLED =====
@@ -166,9 +267,8 @@ void loop() {
     showScreenNormal(t, h, gas, gasStatus);
   }
 
-  // ===== FIREBASE =====
+  // ===== FIREBASE CAM BIEN =====
   if (firebaseReady && Firebase.ready()) {
-
     String sensorPath = "/users/" + userUID + "/sensors/device1";
     FirebaseJson sensorJson;
     sensorJson.set("temperature",  t);
@@ -181,10 +281,8 @@ void loop() {
     if (!Firebase.RTDB.setJSON(&fbdo, sensorPath, &sensorJson))
       Serial.println("!! Cam bien ERR: " + fbdo.errorReason());
 
-    // Notification khi gas chuyen sang DANGER
     if (gasStatus == "DANGER" && lastGasStatus != "DANGER") {
-      pushNotification(fbdo2, "CẢNH BÁO GAS",
-                       "Phát hiện khí gas nguy hiểm!", gas);
+      pushNotification(fbdo2, "CẢNH Báo GAS", "Phát hiện khí gas nguy hiểm!", gas);
       Serial.println(">> Gas DANGER -> Notification");
     }
   }
@@ -194,29 +292,48 @@ void loop() {
 }
 
 // =====================================================
-// Bat/Tat relay + cap nhat Firebase + (tuy chon) notification
+// Bat/Tat quat
 // =====================================================
 void setFan(bool on, bool sendNotif) {
   if (fanIsOn == on) return;
   fanIsOn = on;
   digitalWrite(FAN_RELAY_PIN, on ? HIGH : LOW);
-  updateFanFirebase(on);
+  updateDeviceFirebase(fbdo3, fanDeviceId, on);
 
   if (sendNotif) {
-    if (on) pushNotification(fbdo4, "THIẾT BỊ BẬT", "Quạt đã được bật thủ công.");
-    else    pushNotification(fbdo4, "THIẾT BỊ TẮT", "Quạt đã được tắt thủ công.");
+    if (on) pushNotification(fbdo4, "THIẾT BỊ BẬT", "Quạt đã được bật thủ công bằng nút bấm.");
+    else    pushNotification(fbdo4, "THIẾT BỊ Tắt", "Quat đã được bật thủ công bằng nút bấm.");
   }
 }
 
-void updateFanFirebase(bool on) {
-  if (!(firebaseReady && Firebase.ready())) return;
-  String path = "/users/" + userUID + "/devices/" + fanDeviceId + "/status";
-  if (!Firebase.RTDB.setString(&fbdo3, path, on ? "ON" : "OFF"))
-    Serial.println("!! Fan status ERR: " + fbdo3.errorReason());
+// =====================================================
+// Bat/Tat den
+// =====================================================
+void setLight(bool on, bool sendNotif, bool &stateVar, int pin,
+              FirebaseData &fd, const String &deviceId, String label) {
+  if (stateVar == on) return;
+  stateVar = on;
+  digitalWrite(pin, on ? HIGH : LOW);
+  updateDeviceFirebase(fd, deviceId, on);
+
+  if (sendNotif) {
+    if (on) pushNotification(fd, "THIẾT BỊ BẬT", label + " đã được bật thủ công bằng nút bấm.");
+    else    pushNotification(fd, "THIẾT BỊ Tắt", label + " đã được bật thủ công bằng nút bấm.");
+  }
 }
 
 // =====================================================
-// Push notification len Firebase
+// Cap nhat trang thai thiet bi len Firebase
+// =====================================================
+void updateDeviceFirebase(FirebaseData &fd, const String &deviceId, bool on) {
+  if (!(firebaseReady && Firebase.ready())) return;
+  String path = "/users/" + userUID + "/devices/" + deviceId + "/status";
+  if (!Firebase.RTDB.setString(&fd, path, on ? "ON" : "OFF"))
+    Serial.println("!! Device ERR: " + fd.errorReason());
+}
+
+// =====================================================
+// Push notification
 // =====================================================
 void pushNotification(FirebaseData &fd, String title, String message, int gasVal) {
   if (!(firebaseReady && Firebase.ready())) return;
@@ -232,9 +349,9 @@ void pushNotification(FirebaseData &fd, String title, String message, int gasVal
   if (gasVal >= 0) notiJson.set("gas_value", gasVal);
 
   if (Firebase.RTDB.pushJSON(&fd, notiPath, &notiJson))
-    Serial.println(">> Notification OK: " + title + " | " + fd.pushName());
+    Serial.println(">> Noti OK: " + title + " | " + fd.pushName());
   else
-    Serial.println("!! Notification ERR: " + fd.errorReason());
+    Serial.println("!! Noti ERR: " + fd.errorReason());
 }
 
 // =====================================================
