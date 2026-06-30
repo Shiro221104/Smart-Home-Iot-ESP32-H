@@ -110,6 +110,7 @@ fun HomeScreen() {
     if (showAddDialog) {
         AddDeviceDialog(
             rooms = rooms,
+            existingDevices = devices,
             onDismiss = { showAddDialog = false },
             onAdd = { device ->
                 deviceViewModel.addDevice(device)
