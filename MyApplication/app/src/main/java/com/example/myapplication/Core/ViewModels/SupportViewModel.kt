@@ -1,11 +1,13 @@
 package com.example.myapplication.Feature.Support
 
+import android.app.Application
 import androidx.compose.runtime.mutableStateListOf
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.Core.Models.Device
 import com.example.myapplication.Core.Models.DeviceType
 import com.example.myapplication.Core.Models.Room
+import com.example.myapplication.Core.Models.Schedule
 import com.example.myapplication.Core.repository.DeviceRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.database.DataSnapshot
@@ -15,8 +17,12 @@ import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.OffsetDateTime
+import java.util.Calendar
 
-class SupportViewModel : ViewModel() {
+class SupportViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val appContext get() = getApplication<Application>()
 
     val messages = mutableStateListOf(
         ChatMessage(
@@ -206,6 +212,45 @@ class SupportViewModel : ViewModel() {
     ): String = targets
         .mapNotNull { room -> action(room?.id, room?.name).takeIf { it.isNotBlank() } }
         .joinToString("\n")
+
+    // ===== HELPER: Parse giờ từ parameter Dialogflow ("time", dạng ISO 8601) =====
+
+    private fun parseDialogflowTime(parameters: Map<String, Any>?): Calendar? {
+        val raw = when (val v = parameters?.get("time")) {
+            is List<*> -> v.firstOrNull()?.toString()
+            is String  -> v
+            else       -> null
+        }?.trim()?.takeIf { it.isNotBlank() } ?: return null
+
+        return try {
+            val odt = OffsetDateTime.parse(raw)
+            Calendar.getInstance().apply {
+                set(Calendar.HOUR_OF_DAY, odt.hour)
+                set(Calendar.MINUTE, odt.minute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // ===== HELPER: Lưu lịch vào Firebase rồi đặt báo thức (AlarmManager) =====
+
+    private fun saveScheduleAndArm(schedule: Schedule) {
+        val userId = auth.currentUser?.uid ?: return
+        val ref = database.getReference("users/$userId/schedules").push()
+        schedule.id = ref.key ?: return
+        ref.setValue(schedule)
+        ScheduleManager.scheduleAlarm(appContext, schedule)
+    }
+
+    /** Gọi từ màn hình quản lý lịch (nếu có) để huỷ + xoá 1 lịch đã đặt. */
+    fun deleteSchedule(schedule: Schedule) {
+        val userId = auth.currentUser?.uid ?: return
+        ScheduleManager.cancelAlarm(appContext, schedule)
+        database.getReference("users/$userId/schedules/${schedule.id}").removeValue()
+    }
 
     // ===== MAIN INTENT HANDLER =====
 
@@ -399,6 +444,39 @@ class SupportViewModel : ViewModel() {
                     val list = activeDevices.joinToString("\n") { "• ${it.name}" }
                     "Các thiết bị đang bật$suffix:\n$list"
                 }
+            }
+
+            // ===== SCHEDULE DEVICE: "bật đèn lúc 9h", "tắt quạt phòng ngủ lúc 22h30" =====
+
+            "schedule_device" -> {
+                val cal = parseDialogflowTime(parameters)
+                    ?: return "Không hiểu giờ bạn muốn đặt lịch. Vui lòng nói rõ giờ, ví dụ \"lúc 9 giờ tối\"."
+
+                val deviceTypes = parseDeviceTypes(parameters)
+                val lowerText = rawText.lowercase()
+                val action = if (lowerText.contains("tắt")) "OFF" else "ON"
+                val actionWord = if (action == "ON") "bật" else "tắt"
+
+                val hourStr = cal.get(Calendar.HOUR_OF_DAY)
+                val minuteStr = cal.get(Calendar.MINUTE).toString().padStart(2, '0')
+                val suffix = if (singleRoomName != null) " ở $singleRoomName" else ""
+
+                val results = deviceTypes.map { type ->
+                    val schedule = Schedule(
+                        deviceType = type.toFirebase(),
+                        roomId = singleRoomId,
+                        roomName = singleRoomName,
+                        action = action,
+                        hour = hourStr,
+                        minute = cal.get(Calendar.MINUTE),
+                        repeatDaily = true,
+                        enabled = true
+                    )
+                    saveScheduleAndArm(schedule)
+                    type.toVietnamese()
+                }
+
+                "Đã đặt lịch $actionWord ${results.joinToString(", ")}$suffix lúc $hourStr:$minuteStr hằng ngày."
             }
 
             // ===== FOLLOW-UP: TẮT THIẾT BỊ VỪA BẬT =====
