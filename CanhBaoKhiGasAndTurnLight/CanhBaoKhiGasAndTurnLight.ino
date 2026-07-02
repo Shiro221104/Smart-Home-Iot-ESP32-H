@@ -62,7 +62,7 @@ FirebaseData fbdo6;     // kitchen light status
 FirebaseAuth auth;
 FirebaseConfig config;
 
-String userUID       = "";
+String userUID       = "fWn2xoXCpDWoJyCV1yt3FXxLgMi2";
 String lastGasStatus = "";
 bool   firebaseReady = false;
 
@@ -73,6 +73,7 @@ const String kitchenDeviceId = "-OvLD1-JevTrFOp2dNuy";
 
 // ===== TRANG THAI =====
 bool fanIsOn     = false;
+bool fanAutoMode = false;
 bool livingIsOn  = false;
 bool kitchenIsOn = false;
 
@@ -222,19 +223,55 @@ void loop() {
   else                                  gasStatus = "DANGER";
 
   // ===== LOGIC TU DONG QUAT (theo gas) =====
-  if (gas >= GAS_DANGER_THRESHOLD && !fanIsOn) {
+  // ===== TU DONG THEO CAM BIEN GAS =====
+
+// Có gas nguy hiểm -> tự bật quạt
+if (gas >= GAS_DANGER_THRESHOLD && !fanAutoMode) {
+
+    fanAutoMode = true;
+
     setFan(true, false);
-    pushNotification(fbdo4, "Thiết Bị Tự Động Bật", "Phát hiện khí gas, quạt đã tự động bật.");
-    Serial.println(">> AUTO: Gas nguy hiem -> BAT QUAT");
-  } else if (gas < GAS_SAFE_THRESHOLD && fanIsOn) {
+
+    pushNotification(
+        fbdo4,
+        "Thiết bị tự động bật",
+        "Phát hiện khí gas, quạt đã tự động bật."
+    );
+
+    Serial.println("AUTO -> Fan ON");
+}
+
+// Chỉ khi quạt đang ở chế độ tự động mới được tự tắt
+if (fanAutoMode &&
+    gas < GAS_SAFE_THRESHOLD) {
+
+    fanAutoMode = false;
+
     setFan(false, false);
-    pushNotification(fbdo4, "Thiết Bị Tự Động Tắt", "Khí gas an toàn, quạt đã tự động tắt.");
-    Serial.println(">> AUTO: Gas an toan -> TAT QUAT");
-  }
+
+    pushNotification(
+        fbdo4,
+        "Thiết bị tự động tắt",
+        "Khí gas đã an toàn, quạt tự động tắt."
+    );
+
+    Serial.println("AUTO -> Fan OFF");
+}
 
   // ===== DOC TRANG THAI TU FIREBASE (App dieu khien) =====
   if (firebaseReady && Firebase.ready()) {
+// ===== Quat =====
+String fanPath = "/users/" + userUID + "/devices/" + fanDeviceId + "/status";
+if (Firebase.RTDB.getString(&fbdo3, fanPath)) {
+  bool appWantsOn = (fbdo3.stringData() == "ON");
 
+  if (appWantsOn != fanIsOn) {
+    fanIsOn = appWantsOn;
+    digitalWrite(FAN_RELAY_PIN, fanIsOn ? HIGH : LOW);
+
+    Serial.println(">> APP: Quat -> " + String(fanIsOn ? "ON" : "OFF"));
+  }
+}
     // Den phong khach
     String livingPath = "/users/" + userUID + "/devices/" + livingDeviceId + "/status";
     if (Firebase.RTDB.getString(&fbdo5, livingPath)) {
