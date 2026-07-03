@@ -185,19 +185,26 @@ void openDoor(String source) {
 
   // Notification chi khi nhan mat khau thu cong
   if (source == "Password") {
-    pushNotification("THIET BI BAT", "Cua chinh da duoc mo bang mat khau.");
+    pushNotification("THIẾT BỊ BẬT", "Cửa chính đã được mở bằng mật khẩu.");
   }
+// Mở cửa
+Serial.println("Servo -> OPEN");
+myServo.write(90);
+delay(1000);      // Chờ servo quay tới vị trí mở
 
-  myServo.write(90);
-  delay(5000);
+// Giữ cửa mở
+delay(4000);
 
-  showMessage("Closing...");
-  myServo.write(0);
-  delay(1000);
+showMessage("Closing...");
 
-  updateStatus(doorID, "OFF");
-  showMessage("Enter Password");
-  Serial.println(">> Cua dong");
+// Đóng cửa
+Serial.println("Servo -> CLOSE");
+myServo.write(0);
+delay(1000);      // Chờ servo quay về vị trí đóng
+
+ updateStatus(doorID, "OFF");
+ showMessage("Enter Password");
+ Serial.println(">> Cua dong");
 }
 
 // =====================================================
@@ -237,9 +244,9 @@ void handleButtons() {
 
       // Push notification
       if (bedroomState)
-        pushNotification("THIET BI BAT", "Den phong ngu da duoc bat bang nut nhan.");
+        pushNotification("THIẾT BỊ BẬT", "Đèn phòng ngủ đã được bật bằng nút nhấn.");
       else
-        pushNotification("THIET BI TAT", "Den phong ngu da duoc tat bang nut nhan.");
+        pushNotification("THIẾT BỊ TẮT", "Đèn phòng ngủ đã được tắt bằng nút nhấn.");
 
       showMessage("Phong ngu:", s);
       delay(800);
