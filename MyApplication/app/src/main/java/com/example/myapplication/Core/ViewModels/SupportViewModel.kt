@@ -16,9 +16,13 @@ import com.google.firebase.database.FirebaseDatabase
 import com.google.firebase.database.ValueEventListener
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
 import java.time.OffsetDateTime
 import java.util.Calendar
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 class SupportViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -42,6 +46,7 @@ class SupportViewModel(application: Application) : AndroidViewModel(application)
     // ===== CONTEXT =====
     private var lastIntent: String = ""
     private var lastParameters: Map<String, Any>? = null
+    private var lastDeviceRoomClauses: List<DeviceRoomClause>? = null
 
     init {
         deviceRepository.getDevices { devices ->
@@ -92,6 +97,12 @@ class SupportViewModel(application: Application) : AndroidViewModel(application)
                 val parameters = response.queryResult.parameters
 
                 val localReply = handleIntent(intentName, parameters, userText)
+
+                lastDeviceRoomClauses = if (intentName == "turn_on_multi_devices" || intentName == "turn_off_multi_devices") {
+                    parseClausesFromRawText(userText)
+                } else {
+                    null
+                }
 
                 if (intentName != "turn_off_last_device" && intentName != "turn_on_last_device") {
                     lastIntent = intentName
@@ -204,6 +215,106 @@ class SupportViewModel(application: Application) : AndroidViewModel(application)
         return types.ifEmpty { listOf(DeviceType.LIGHT, DeviceType.FAN) }
     }
 
+    private fun parseDeviceTypesForCancel(parameters: Map<String, Any>?): List<DeviceType>? {
+        val deviceParam = when (val raw = parameters?.get("device")) {
+            is List<*> -> raw.mapNotNull { it?.toString()?.trim()?.lowercase() }
+            is String  -> listOf(raw.trim().lowercase())
+            else       -> emptyList()
+        }
+
+        if (deviceParam.isEmpty()) return null
+
+        val types = mutableListOf<DeviceType>()
+        if (deviceParam.any { it.contains("đèn") || it.contains("light") }) types += DeviceType.LIGHT
+        if (deviceParam.any { it.contains("quạt") || it.contains("fan") }) types += DeviceType.FAN
+        if (deviceParam.any { it.contains("cửa") || it.contains("door") }) types += DeviceType.DOOR
+        return types.ifEmpty { null }
+    }
+
+    private fun scheduleMatch(
+        schedule: Schedule,
+        deviceTypes: List<DeviceType>?,
+        roomIds: List<String>?,
+        time: Calendar?
+    ): Boolean {
+        if (deviceTypes != null && deviceTypes.isNotEmpty()) {
+            val firebaseTypes = deviceTypes.map { it.toFirebase() }
+            if (schedule.deviceType !in firebaseTypes) return false
+        }
+
+        if (roomIds != null && schedule.roomId !in roomIds) return false
+
+        if (time != null) {
+            if (schedule.hour != time.get(Calendar.HOUR_OF_DAY) ||
+                schedule.minute != time.get(Calendar.MINUTE)
+            ) return false
+
+            schedule.scheduleDate?.let {
+                if (formatDateToISO(time) != it) return false
+            }
+        }
+
+        return true
+    }
+
+    private fun formatScheduleDescription(schedule: Schedule): String {
+        val deviceName = DeviceType.fromString(schedule.deviceType).toVietnamese()
+        val roomName = schedule.roomId?.let { id ->
+            roomList.find { it.id == id }?.name ?: id
+        }
+        val roomSuffix = roomName?.let { " ở $it" } ?: ""
+        val time = "${schedule.hour.toString().padStart(2, '0')}:${schedule.minute.toString().padStart(2, '0')}"
+        val dateText = when {
+            schedule.repeatDaily -> " mỗi ngày"
+            schedule.scheduleDate != null -> " vào ${formatDateForDisplay(schedule.scheduleDate)}"
+            else -> ""
+        }
+        val actionWord = if (schedule.action == "ON") "Bật" else "Tắt"
+        return "$actionWord $deviceName$roomSuffix lúc $time$dateText"
+    }
+
+    private fun formatDateForDisplay(isoDate: String): String {
+        return try {
+            val parts = isoDate.split("-")
+            val year = parts[0].toInt()
+            val month = parts[1].toInt()
+            val day = parts[2].toInt()
+            "ngày $day tháng $month"
+        } catch (e: Exception) {
+            isoDate
+        }
+    }
+
+    private suspend fun getSchedules(): List<Schedule> = suspendCancellableCoroutine { cont ->
+        val userId = auth.currentUser?.uid
+        if (userId == null) {
+            cont.resume(emptyList())
+            return@suspendCancellableCoroutine
+        }
+
+        val ref = database.getReference("users/$userId/schedules")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val schedules = mutableListOf<Schedule>()
+                for (item in snapshot.children) {
+                    val schedule = item.getValue(Schedule::class.java)
+                    if (schedule != null) {
+                        schedule.id = item.key ?: schedule.id
+                        schedules.add(schedule)
+                    }
+                }
+                cont.resume(schedules)
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                cont.resumeWithException(error.toException())
+            }
+        }
+
+        ref.addListenerForSingleValueEvent(listener)
+        cont.invokeOnCancellation { ref.removeEventListener(listener) }
+    }
+
     // ===== HELPER: Chạy action cho từng phòng, gom kết quả =====
 
     private fun forEachRoom(
@@ -213,7 +324,175 @@ class SupportViewModel(application: Application) : AndroidViewModel(application)
         .mapNotNull { room -> action(room?.id, room?.name).takeIf { it.isNotBlank() } }
         .joinToString("\n")
 
-    // ===== HELPER: Parse giờ từ parameter Dialogflow ("time", dạng ISO 8601) =====
+    // ===== HELPER: Kiểm tra xem người dùng có ý định đặt lịch hay không =====
+
+    private fun isScheduleIntent(rawText: String, hasTimeParameter: Boolean): Boolean {
+        val lowerText = rawText.lowercase()
+        val scheduleKeywords = listOf(
+            "lúc", "giờ", "h:", "h ", "và tắt", "mỗi ngày", "hôm nay", "ngày mai",
+            "thứ", "đặt lịch", "set schedule", "every day", "daily", "phút nữa", "giờ nữa",
+            "phút", "giờ", "sau"
+        )
+        return hasTimeParameter || scheduleKeywords.any { lowerText.contains(it) }
+    }
+
+    private fun parseRelativeDelayToCalendar(rawText: String, now: Calendar = Calendar.getInstance()): Calendar? {
+        val lowerText = rawText.lowercase()
+        val pattern = Regex("""(?:sau|trong|vào)?\s*(\d+)\s*(phút|phut|min|m|giờ|hour|h)\s*(nữa|sau|đó)?""")
+        val match = pattern.find(lowerText) ?: return null
+
+        return try {
+            val amount = match.groupValues[1].toInt()
+            val unit = match.groupValues[2]
+            (now.clone() as Calendar).apply {
+                when (unit) {
+                    "phút", "phut", "min", "m" -> add(Calendar.MINUTE, amount)
+                    "giờ", "hour", "h" -> add(Calendar.HOUR_OF_DAY, amount)
+                }
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    // ===== HELPER: Parse ngày từ text (hôm nay, ngày mai, ngày kia, thứ 2, tuần sau, ngày 5 tháng 7, 5/7, 24h nữa, sau X giờ, etc.) =====
+
+    internal fun parseDateFromText(rawText: String, now: Calendar = Calendar.getInstance()): Pair<Calendar?, Boolean>? {
+        // Returns: Pair(Calendar object, shouldRepeat) or null
+        val lowerText = rawText.lowercase()
+        val today = (now.clone() as Calendar).apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+
+        parseRelativeDelayToCalendar(rawText, now)?.let { relativeTime ->
+            return Pair(relativeTime, false)
+        }
+
+        // Kiểm tra "24h nữa", "sau 24h", "trong 1 ngày"
+        val hoursPattern = Regex("""(?:sau|trong|giờ nữa|h nữa|sau\s+)?(\d+)\s*(?:h|giờ|hour)""")
+        val hoursMatch = hoursPattern.find(lowerText)
+        if (hoursMatch != null) {
+            try {
+                val hours = hoursMatch.groupValues[1].toInt()
+                if (hours >= 24) {
+                    val daysToAdd = hours / 24
+                    val result = (today.clone() as Calendar).apply {
+                        add(Calendar.DAY_OF_MONTH, daysToAdd)
+                    }
+                    return Pair(result, false)
+                }
+            } catch (e: Exception) {
+                // Continue to check other patterns
+            }
+        }
+
+        // Kiểm tra "sau X ngày", "trong X ngày"
+        val daysPattern = Regex("""(?:sau|trong)\s+(\d+)\s*(?:ngày|day)""")
+        val daysMatch = daysPattern.find(lowerText)
+        if (daysMatch != null) {
+            try {
+                val days = daysMatch.groupValues[1].toInt()
+                val result = (today.clone() as Calendar).apply {
+                    add(Calendar.DAY_OF_MONTH, days)
+                }
+                return Pair(result, false)
+            } catch (e: Exception) {
+                // Continue to check other patterns
+            }
+        }
+
+        // Kiểm tra ngày/tháng cụ thể: "ngày 5 tháng 7", "5 tháng 7", "5/7", "5-7"
+        val datePattern = Regex("""(?:ngày\s+)?(\d{1,2})(?:\s+tháng|\s+\/|-)?(\d{1,2})(?:\s+năm\s+(\d{4}))?""")
+        val dateMatch = datePattern.find(lowerText)
+        if (dateMatch != null) {
+            try {
+                val day = dateMatch.groupValues[1].toInt()
+                val month = dateMatch.groupValues[2].toInt()
+                val year = dateMatch.groupValues[3].takeIf { it.isNotEmpty() }?.toInt()
+                    ?: today.get(Calendar.YEAR)
+
+                val result = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, year)
+                    set(Calendar.MONTH, month - 1)
+                    set(Calendar.DAY_OF_MONTH, day)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+
+                if (result.get(Calendar.DAY_OF_MONTH) == day) {
+                    return Pair(result, false)
+                }
+            } catch (e: Exception) {
+                // Invalid date, continue to check other patterns
+            }
+        }
+
+        return when {
+            lowerText.contains("mỗi ngày") || lowerText.contains("hằng ngày") ||
+            lowerText.contains("every day") || lowerText.contains("daily") ->
+                Pair(null, true)
+
+            lowerText.contains("hôm nay") || lowerText.contains("today") ->
+                Pair(today.clone() as Calendar, false)
+
+            lowerText.contains("ngày mai") || lowerText.contains("tomorrow") ->
+                Pair((today.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 1) }, false)
+
+            lowerText.contains("ngày kia") ->
+                Pair((today.clone() as Calendar).apply { add(Calendar.DAY_OF_MONTH, 2) }, false)
+
+            lowerText.contains("tuần sau") || lowerText.contains("next week") ->
+                Pair((today.clone() as Calendar).apply { add(Calendar.WEEK_OF_YEAR, 1) }, false)
+
+            else -> null
+        }
+    }
+
+    // ===== HELPER: Tự động chọn hôm nay hoặc ngày mai dựa trên thời gian =====
+    
+    private fun getSmartScheduleDate(scheduledHour: Int, scheduledMinute: Int): Pair<String?, Boolean> {
+        // Returns: Pair(scheduleDate in ISO format, shouldRepeat)
+        // Nếu giờ muốn đặt > giờ hiện tại → hôm nay (không lặp)
+        // Nếu giờ muốn đặt <= giờ hiện tại → ngày mai (không lặp)
+        
+        val now = Calendar.getInstance()
+        val currentHour = now.get(Calendar.HOUR_OF_DAY)
+        val currentMinute = now.get(Calendar.MINUTE)
+        
+        val today = (now.clone() as Calendar).apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        
+        val isTimeInFuture = (scheduledHour > currentHour) || 
+                             (scheduledHour == currentHour && scheduledMinute > currentMinute)
+        
+        val targetDate = if (isTimeInFuture) {
+            today  // Hôm nay
+        } else {
+            (today.clone() as Calendar).apply {
+                add(Calendar.DAY_OF_MONTH, 1)  // Ngày mai
+            }
+        }
+        
+        return Pair(formatDateToISO(targetDate), false)  // false = không lặp
+    }
+    
+    // ===== HELPER: Format ngày thành ISO string =====
+    
+    private fun formatDateToISO(cal: Calendar): String {
+        val year = cal.get(Calendar.YEAR)
+        val month = (cal.get(Calendar.MONTH) + 1).toString().padStart(2, '0')
+        val day = cal.get(Calendar.DAY_OF_MONTH).toString().padStart(2, '0')
+        return "$year-$month-$day"
+    }
 
     private fun parseDialogflowTime(parameters: Map<String, Any>?): Calendar? {
         val raw = when (val v = parameters?.get("time")) {
@@ -254,7 +533,7 @@ class SupportViewModel(application: Application) : AndroidViewModel(application)
 
     // ===== MAIN INTENT HANDLER =====
 
-    private fun handleIntent(
+    private suspend fun handleIntent(
         intentName: String,
         parameters: Map<String, Any>? = null,
         rawText: String = ""
@@ -265,9 +544,49 @@ class SupportViewModel(application: Application) : AndroidViewModel(application)
         if (roomTargets == null) return roomError
 
         val singleRoomName = roomTargets.firstOrNull()?.name
-        val singleRoomId   = roomTargets.firstOrNull()?.id
+        val singleRoomId = roomTargets.filterNotNull().map { it.id }.takeIf { it.size == 1 }?.firstOrNull()
+        val singleRoomIds = roomTargets.filterNotNull().map { it.id }.ifEmpty { null }
 
         return when (intentName) {
+
+            // ===== LIST SCHEDULES =====
+
+            "list_schedules" -> {
+                val schedules = getSchedules()
+                val filtered = schedules.filter { scheduleMatch(it, null, singleRoomIds, null) }
+                if (filtered.isEmpty()) {
+                    if (singleRoomName != null) "Không có lịch nào trong phòng $singleRoomName." else "Không có lịch nào."
+                } else {
+                    val lines = filtered.mapIndexed { index, schedule ->
+                        "${index + 1}. ${formatScheduleDescription(schedule)}"
+                    }
+                    "Danh sách lịch đã đặt:\n${lines.joinToString("\n")}" 
+                }
+            }
+
+            // ===== CANCEL SCHEDULE =====
+
+            "cancel_schedule" -> {
+                val explicitTime = parseDialogflowTime(parameters)
+                val relativeTime = parseRelativeDelayToCalendar(rawText)
+                val filterTime = explicitTime ?: relativeTime
+                val deviceTypes = parseDeviceTypesForCancel(parameters)
+
+                val schedules = getSchedules()
+                val matched = schedules.filter { scheduleMatch(it, deviceTypes, singleRoomIds, filterTime) }
+                if (matched.isEmpty()) {
+                    "Không tìm thấy lịch phù hợp để huỷ."
+                } else {
+                    matched.forEach { deleteSchedule(it) }
+                    val count = matched.size
+                    val suffix = when {
+                        singleRoomName != null -> " trong phòng $singleRoomName"
+                        filterTime != null -> " lúc ${filterTime.get(Calendar.HOUR_OF_DAY).toString().padStart(2, '0')}:${filterTime.get(Calendar.MINUTE).toString().padStart(2, '0')}"
+                        else -> ""
+                    }
+                    "Đã huỷ $count lịch$suffix."
+                }
+            }
 
             // ===== TURN ON MULTI DEVICES =====
 
@@ -446,14 +765,137 @@ class SupportViewModel(application: Application) : AndroidViewModel(application)
                 }
             }
 
-            // ===== SCHEDULE DEVICE: "bật đèn lúc 9h", "tắt quạt phòng ngủ lúc 22h30" =====
+            // ===== SCHEDULE DEVICE: "bật đèn lúc 9h", "tắt quạt phòng ngủ lúc 22h30", "bật lúc 11h49 và tắt lúc 11h50" =====
 
             "schedule_device" -> {
-                val cal = parseDialogflowTime(parameters)
+                val lowerText = rawText.lowercase()
+                val hasTimeParam = parameters?.containsKey("time") == true
+                
+                // Nếu không có time parameter và không phải schedule request, thì chỉ bật/tắt ngay
+                if (!hasTimeParam && !isScheduleIntent(lowerText, hasTimeParam)) {
+                    val action = if (lowerText.contains("tắt")) "OFF" else "ON"
+                    val deviceTypes = parseDeviceTypes(parameters)
+                    val actionWord = if (action == "ON") "bật" else "tắt"
+                    val suffix = if (singleRoomName != null) " ở $singleRoomName" else ""
+                    
+                    return forEachRoom(roomTargets) { roomId, roomName ->
+                        deviceTypes
+                            .map { controlDeviceMulti(it, action, roomId, roomName) }
+                            .filter { it.isNotBlank() }
+                            .joinToString(", ")
+                    }.ifBlank { "Đã thực hiện xong." }
+                }
+                
+                // Kiểm tra nếu có cấu trúc "bật lúc X và tắt lúc Y"
+                val andSchedulePattern = Regex("""(bật|tắt|mở|đóng)\s+.*?lúc\s+(\d{1,2})(?::|h)\s*(\d{0,2})\s*(?:và|,)\s*(bật|tắt|mở|đóng)\s+.*?lúc\s+(\d{1,2})(?::|h)\s*(\d{0,2})""", RegexOption.IGNORE_CASE)
+                val matchResult = andSchedulePattern.find(lowerText)
+                
+                if (matchResult != null) {
+                    // Trường hợp: "bật lúc 11h49 và tắt lúc 11h50"
+                    val deviceTypes = parseDeviceTypes(parameters)
+                    val suffix = if (singleRoomName != null) " ở $singleRoomName" else ""
+                    
+                    try {
+                        val actionWord1 = matchResult.groupValues[1].lowercase()
+                        val hour1 = matchResult.groupValues[2].toInt()
+                        val minute1 = matchResult.groupValues[3].takeIf { it.isNotEmpty() }?.toInt() ?: 0
+                        val action1 = if (actionWord1 == "tắt" || actionWord1 == "đóng") "OFF" else "ON"
+                        
+                        val actionWord2 = matchResult.groupValues[4].lowercase()
+                        val hour2 = matchResult.groupValues[5].toInt()
+                        val minute2 = matchResult.groupValues[6].takeIf { it.isNotEmpty() }?.toInt() ?: 0
+                        val action2 = if (actionWord2 == "tắt" || actionWord2 == "đóng") "OFF" else "ON"
+                        
+                        // Parse ngày (nếu có người dùng nói rõ)
+                        val dateInfo = parseDateFromText(lowerText)
+                        val (finalScheduleDate, finalShouldRepeat) = if (dateInfo != null) {
+                            Pair(
+                                dateInfo.first?.let { formatDateToISO(it) },
+                                dateInfo.second
+                            )
+                        } else {
+                            // Không nói ngày cụ thể → tự động chọn hôm nay hoặc ngày mai
+                            getSmartScheduleDate(hour1, minute1)
+                        }
+                        
+                        val dateDescription = when {
+                            lowerText.contains("hôm nay") -> " hôm nay"
+                            lowerText.contains("ngày mai") -> " ngày mai"
+                            lowerText.contains("ngày kia") -> " ngày kia"
+                            lowerText.contains("24h") || (lowerText.contains("sau 1") && lowerText.contains("ngày")) -> " ngày mai"
+                            lowerText.contains("mỗi ngày") || lowerText.contains("hằng ngày") -> " hằng ngày"
+                            finalScheduleDate != null && !finalShouldRepeat -> {
+                                val today = Calendar.getInstance()
+                                today.set(Calendar.HOUR_OF_DAY, 0)
+                                today.set(Calendar.MINUTE, 0)
+                                today.set(Calendar.SECOND, 0)
+                                today.set(Calendar.MILLISECOND, 0)
+                                
+                                val target = Calendar.getInstance()
+                                SimpleDateFormat("yyyy-MM-dd").parse(finalScheduleDate)?.let { target.time = it }
+                                
+                                when {
+                                    target.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) && 
+                                    target.get(Calendar.YEAR) == today.get(Calendar.YEAR) -> " hôm nay"
+                                    target.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) + 1 && 
+                                    target.get(Calendar.YEAR) == today.get(Calendar.YEAR) -> " ngày mai"
+                                    target.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) + 2 && 
+                                    target.get(Calendar.YEAR) == today.get(Calendar.YEAR) -> " ngày kia"
+                                    else -> {
+                                        val day = target.get(Calendar.DAY_OF_MONTH)
+                                        val month = target.get(Calendar.MONTH) + 1
+                                        " ngày $day tháng $month"
+                                    }
+                                }
+                            }
+                            else -> ""
+                        }
+                        
+                        // Tạo 2 schedule riêng
+                        val schedules = mutableListOf<Pair<Schedule, String>>()
+                        deviceTypes.forEach { type ->
+                            schedules.add(Schedule(
+                                deviceType = type.toFirebase(),
+                                roomId = singleRoomId,
+                                action = action1,
+                                hour = hour1,
+                                minute = minute1,
+                                repeatDaily = finalShouldRepeat,
+                                scheduleDate = finalScheduleDate,
+                                enabled = true
+                            ) to "${if (action1 == "ON") "bật" else "tắt"} lúc $hour1:${minute1.toString().padStart(2, '0')}")
+                            
+                            schedules.add(Schedule(
+                                deviceType = type.toFirebase(),
+                                roomId = singleRoomId,
+                                action = action2,
+                                hour = hour2,
+                                minute = minute2,
+                                repeatDaily = finalShouldRepeat,
+                                scheduleDate = finalScheduleDate,
+                                enabled = true
+                            ) to "${if (action2 == "ON") "bật" else "tắt"} lúc $hour2:${minute2.toString().padStart(2, '0')}")
+                        }
+                        
+                        schedules.forEach { (schedule, _) ->
+                            saveScheduleAndArm(schedule)
+                        }
+                        
+                        val deviceList = deviceTypes.map { it.toVietnamese() }
+                        val actionTexts = schedules.map { it.second }
+                        return "Đã đặt lịch ${deviceList.joinToString(", ")}$suffix: ${actionTexts.joinToString(" và ")}$dateDescription."
+                    } catch (e: Exception) {
+                        return "Không hiểu lịch bạn muốn đặt. Vui lòng nói rõ, ví dụ \"bật lúc 9 giờ và tắt lúc 22 giờ mỗi ngày\"."
+                    }
+                }
+                
+                // Trường hợp thường: "bật đèn lúc 9h", "tắt quạt lúc 22h30", "bật đèn 30 phút nữa"
+                val explicitTime = parseDialogflowTime(parameters)
+                val relativeTime = parseRelativeDelayToCalendar(rawText)
+                val cal = explicitTime ?: relativeTime
                     ?: return "Không hiểu giờ bạn muốn đặt lịch. Vui lòng nói rõ giờ, ví dụ \"lúc 9 giờ tối\"."
 
                 val deviceTypes = parseDeviceTypes(parameters)
-                val lowerText = rawText.lowercase()
                 val action = if (lowerText.contains("tắt")) "OFF" else "ON"
                 val actionWord = if (action == "ON") "bật" else "tắt"
 
@@ -461,22 +903,88 @@ class SupportViewModel(application: Application) : AndroidViewModel(application)
                 val minuteStr = cal.get(Calendar.MINUTE).toString().padStart(2, '0')
                 val suffix = if (singleRoomName != null) " ở $singleRoomName" else ""
 
+                // Parse ngày (nếu có)
+                val dateInfo = parseDateFromText(lowerText, cal)
+                val (finalScheduleDate, finalShouldRepeat) = when {
+                    // Người dùng nói rõ ngày (hôm nay, ngày mai, ngày 5/7, etc.)
+                    dateInfo != null -> Pair(
+                        dateInfo.first?.let { formatDateToISO(it) },
+                        dateInfo.second
+                    )
+                    // Là thời gian tương đối (30 phút nữa, 2 giờ nữa, etc.) → không lặp
+                    relativeTime != null -> Pair(null, false)
+                    // Là giờ cụ thể (lúc 9h) → tự động chọn hôm nay hoặc ngày mai
+                    explicitTime != null -> getSmartScheduleDate(hourStr, cal.get(Calendar.MINUTE))
+                    else -> Pair(null, true)  // Fallback: lặp mỗi ngày
+                }
+                
+                val dateDescription = when {
+                    lowerText.contains("hôm nay") -> " hôm nay"
+                    lowerText.contains("ngày mai") -> " ngày mai"
+                    lowerText.contains("ngày kia") -> " ngày kia"
+                    lowerText.contains("24h") || (lowerText.contains("sau 1") && lowerText.contains("ngày")) -> " ngày mai"
+                    relativeTime != null -> {
+                        // Thời gian tương đối - tính toán mô tả
+                        val now = Calendar.getInstance()
+                        val tomorrow = (now.clone() as Calendar).apply {
+                            add(Calendar.DAY_OF_MONTH, 1)
+                            set(Calendar.HOUR_OF_DAY, 0)
+                            set(Calendar.MINUTE, 0)
+                            set(Calendar.SECOND, 0)
+                        }
+                        
+                        when {
+                            cal.get(Calendar.DAY_OF_YEAR) == now.get(Calendar.DAY_OF_YEAR) && 
+                            cal.get(Calendar.YEAR) == now.get(Calendar.YEAR) -> " hôm nay"
+                            cal.get(Calendar.DAY_OF_YEAR) == tomorrow.get(Calendar.DAY_OF_YEAR) && 
+                            cal.get(Calendar.YEAR) == tomorrow.get(Calendar.YEAR) -> " ngày mai"
+                            else -> ""
+                        }
+                    }
+                    finalScheduleDate != null && !finalShouldRepeat -> {
+                        val today = Calendar.getInstance()
+                        today.set(Calendar.HOUR_OF_DAY, 0)
+                        today.set(Calendar.MINUTE, 0)
+                        today.set(Calendar.SECOND, 0)
+                        today.set(Calendar.MILLISECOND, 0)
+
+                        val target = Calendar.getInstance()
+                        SimpleDateFormat("yyyy-MM-dd").parse(finalScheduleDate)?.let { target.time = it }
+
+                        when {
+                            target.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) && 
+                            target.get(Calendar.YEAR) == today.get(Calendar.YEAR) -> " hôm nay"
+                            target.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) + 1 && 
+                            target.get(Calendar.YEAR) == today.get(Calendar.YEAR) -> " ngày mai"
+                            target.get(Calendar.DAY_OF_YEAR) == today.get(Calendar.DAY_OF_YEAR) + 2 && 
+                            target.get(Calendar.YEAR) == today.get(Calendar.YEAR) -> " ngày kia"
+                            else -> {
+                                val day = target.get(Calendar.DAY_OF_MONTH)
+                                val month = target.get(Calendar.MONTH) + 1
+                                " ngày $day tháng $month"
+                            }
+                        }
+                    }
+                    finalShouldRepeat -> " hằng ngày"
+                    else -> ""
+                }
+
                 val results = deviceTypes.map { type ->
                     val schedule = Schedule(
                         deviceType = type.toFirebase(),
                         roomId = singleRoomId,
-                        roomName = singleRoomName,
                         action = action,
                         hour = hourStr,
                         minute = cal.get(Calendar.MINUTE),
-                        repeatDaily = true,
+                        repeatDaily = finalShouldRepeat,
+                        scheduleDate = finalScheduleDate,
                         enabled = true
                     )
                     saveScheduleAndArm(schedule)
                     type.toVietnamese()
                 }
 
-                "Đã đặt lịch $actionWord ${results.joinToString(", ")}$suffix lúc $hourStr:$minuteStr hằng ngày."
+                "Đã đặt lịch $actionWord ${results.joinToString(", ")}$suffix lúc $hourStr:$minuteStr$dateDescription."
             }
 
             // ===== FOLLOW-UP: TẮT THIẾT BỊ VỪA BẬT =====
@@ -486,7 +994,22 @@ class SupportViewModel(application: Application) : AndroidViewModel(application)
                 val suffix = if (prevRoomName != null) " ở $prevRoomName" else ""
                 when (lastIntent) {
                     "turn_on_multi_devices" -> {
-                        // Tắt đúng loại thiết bị đã bật trước đó
+                        lastDeviceRoomClauses?.let { clauses ->
+                            clauses
+                                .map { controlDeviceMulti(it.type, "OFF", it.roomId, it.roomName) }
+                                .filter { it.isNotBlank() }
+                                .joinToString("\n")
+                                .ifBlank { "Đã tắt thiết bị$suffix" }
+                        } ?: run {
+                            val deviceTypes = parseDeviceTypes(lastParameters)
+                            deviceTypes
+                                .map { controlDeviceMulti(it, "OFF", prevRoomId, prevRoomName) }
+                                .filter { it.isNotBlank() }
+                                .joinToString(", ")
+                                .ifBlank { "Đã tắt thiết bị$suffix" }
+                        }
+                    }
+                    "query_device_status" -> {
                         val deviceTypes = parseDeviceTypes(lastParameters)
                         deviceTypes
                             .map { controlDeviceMulti(it, "OFF", prevRoomId, prevRoomName) }
@@ -515,6 +1038,22 @@ class SupportViewModel(application: Application) : AndroidViewModel(application)
                 val suffix = if (prevRoomName != null) " ở $prevRoomName" else ""
                 when (lastIntent) {
                     "turn_off_multi_devices" -> {
+                        lastDeviceRoomClauses?.let { clauses ->
+                            clauses
+                                .map { controlDeviceMulti(it.type, "ON", it.roomId, it.roomName) }
+                                .filter { it.isNotBlank() }
+                                .joinToString("\n")
+                                .ifBlank { "Đã bật thiết bị$suffix" }
+                        } ?: run {
+                            val deviceTypes = parseDeviceTypes(lastParameters)
+                            deviceTypes
+                                .map { controlDeviceMulti(it, "ON", prevRoomId, prevRoomName) }
+                                .filter { it.isNotBlank() }
+                                .joinToString(", ")
+                                .ifBlank { "Đã bật thiết bị$suffix" }
+                        }
+                    }
+                    "query_device_status" -> {
                         val deviceTypes = parseDeviceTypes(lastParameters)
                         deviceTypes
                             .map { controlDeviceMulti(it, "ON", prevRoomId, prevRoomName) }

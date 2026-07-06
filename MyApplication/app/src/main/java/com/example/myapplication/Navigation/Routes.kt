@@ -13,8 +13,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.myapplication.Feature.Setting.SettingScreen
 import com.example.myapplication.Feature.Support.SupportScreen
+import com.example.myapplication.Feature.Support.SupportViewModel
 
 import com.example.myapplication.Feature.home.HomeScreen
 import com.example.myapplication.Feature.notification.NotificationScreen
@@ -23,6 +25,7 @@ import com.example.myapplication.Feature.notification.NotificationScreen
 @Composable
 fun MainScreen() {
     val navController = rememberNavController()
+    val supportViewModel: SupportViewModel = viewModel()
     var selected by remember { mutableStateOf(0) }
 
     Scaffold(
@@ -48,7 +51,7 @@ fun MainScreen() {
         ) {
             composable("home") { HomeScreen() }
             composable("notification"){ NotificationScreen() }
-            composable("support"){ SupportScreen() }
+            composable("support"){ SupportScreen(viewModel = supportViewModel) }
             composable("setting"){ SettingScreen() }
         }
     }

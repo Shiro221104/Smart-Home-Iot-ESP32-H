@@ -42,13 +42,6 @@ fun NotificationScreen() {
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    painter = painterResource(R.drawable.bell),
-                    contentDescription = null,
-                    modifier = Modifier.size(26.dp),
-                    tint = Color.Black
-                )
-
                 Text(
                     text = "Thông Báo",
                     fontSize = 24.sp,

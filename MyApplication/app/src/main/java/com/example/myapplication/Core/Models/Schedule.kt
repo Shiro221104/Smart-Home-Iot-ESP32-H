@@ -9,5 +9,6 @@ data class Schedule(
     val hour: Int = 0,
     val minute: Int = 0,
     val repeatDaily: Boolean = true,
+    val scheduleDate: String? = null,  // ISO date format "yyyy-MM-dd" for single-day schedules, null for daily
     val enabled: Boolean = true
 )
