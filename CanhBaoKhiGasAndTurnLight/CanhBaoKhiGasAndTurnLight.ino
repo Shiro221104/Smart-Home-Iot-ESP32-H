@@ -68,8 +68,8 @@ bool   firebaseReady = false;
 
 // ===== DEVICE IDs =====
 const String fanDeviceId     = "-OvLD7bW7bkRn_5Sr5uG";
-const String livingDeviceId  = "-OvKwCdcMamePNGjS0Kt";
-const String kitchenDeviceId = "-OvLD1-JevTrFOp2dNuy";
+const String livingDeviceId  = "-OvKwCdcMamePNGjS0Ku";
+const String kitchenDeviceId = "-OwwkUIAaIEo0Qt1nGCM";
 
 // ===== TRANG THAI =====
 bool fanIsOn     = false;
@@ -339,7 +339,7 @@ void setFan(bool on, bool sendNotif) {
 
   if (sendNotif) {
     if (on) pushNotification(fbdo4, "THIẾT BỊ BẬT", "Quạt đã được bật thủ công bằng nút bấm.");
-    else    pushNotification(fbdo4, "THIẾT BỊ Tắt", "Quat đã được bật thủ công bằng nút bấm.");
+    else    pushNotification(fbdo4, "THIẾT BỊ Tắt", "Quat đã được tắt thủ công bằng nút bấm.");
   }
 }
 
@@ -355,7 +355,7 @@ void setLight(bool on, bool sendNotif, bool &stateVar, int pin,
 
   if (sendNotif) {
     if (on) pushNotification(fd, "THIẾT BỊ BẬT", label + " đã được bật thủ công bằng nút bấm.");
-    else    pushNotification(fd, "THIẾT BỊ Tắt", label + " đã được bật thủ công bằng nút bấm.");
+    else    pushNotification(fd, "THIẾT BỊ Tắt", label + " đã được tắt thủ công bằng nút bấm.");
   }
 }
 
